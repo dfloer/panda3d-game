@@ -95,20 +95,27 @@ class Terrain:
         for k, v in chunk_cells.items():
             self.hexagon_map[k] = v
 
+    def __len__(self):
+        return len(self.hexagon_map)
+
 
 class TerrainCell:
     """
     A class to store specific terrain cells and their associated properties. This is just a cell, and doesn't know coordinates, or anything.
     """
-    def __init__(self, terrain_type=0, sprite_id=0, building=None):
+    def __init__(self, terrain_type=0, sprite_id=None, building=None):
         self.terrain_type = terrain_type
         self.sprite_id = sprite_id
         self.building = building
         test_buildings = randint(0, 32)
         if test_buildings == 8:
-            self.building = 'A'
+            self.sprite_id = 'A'
         elif test_buildings == 16:
-            self.building = 'B'
+            self.sprite_id = 'B'
+        elif test_buildings == 4:
+            self.sprite_id = "RB"
+        elif test_buildings == 2:
+            self.sprite_id = "HR"
 
     def __str__(self):
         return f"Terrain: {self.terrain_type}, id: {self.sprite_id}, building: {self.building}."
@@ -145,7 +152,7 @@ class MapLayer(ScrollableLayer):
         scroller.set_focus(*args, **kwargs)
 
 
-class MouseLayer(ScrollableLayer):
+class InputLayer(ScrollableLayer):
     is_event_handler = True
 
     def __init__(self):
@@ -192,12 +199,49 @@ class MouseLayer(ScrollableLayer):
         self.last_hex = sprite
         # print(f"mouse move: ({x}, {y}), dx: {dx}, dy: {dy}.")
 
+    def on_key_press(self, key, modifiers):
+        print(key, modifiers)
+
 
     def set_view(self, x, y, w, h, viewport_ox=0, viewport_oy=0):
         """
         A stub to get things working.
         """
         super().set_view(x, y, w, h, viewport_ox, viewport_oy)
+
+
+class BuildingLayer(ScrollableLayer):
+    is_event_handler = True
+
+    def __init__(self):
+        super().__init__()
+        self.last_hex = None
+        self.buildings_batch = BatchNode()
+        self.buildings_batch.position = layout.origin.x, layout.origin.y
+        self.draw_buildings()
+
+    def draw_buildings(self):
+        for k, v in terrain_map.hexagon_map.items():
+            building = v.building
+            if building is not None:
+                print(building)
+                position = hex_math.hex_to_pixel(layout, k, False)
+                # Todo: Figure out the issue causing hexes to sometime not be properly selected, probably rouning.
+
+                anchor = sprite_width / 2, sprite_height / 2
+                sprite = Sprite(f"sprites/{v.sprite_id}.png", position=position, anchor=anchor)
+                self.selected_batch.add(sprite, z=-k.r)
+                self.add(self.selected_batch)
+
+    def plop_building(self, cell, building_id):
+        """
+        Adds the building with the given ID at the given location.
+        Right now this is basically a stub to get the display code running, but this will need to be more complex as buildings actually do something.
+        Args:
+            cell: where do we want to plop this building?
+            building_id: id of the building to add.
+        """
+
 
 
 class MenuLayer(Menu):
@@ -210,13 +254,15 @@ class MenuLayer(Menu):
 
 if __name__ == "__main__":
     terrain_map = Terrain()
-    mouse_layer = MouseLayer()
     terrain_map.generate_chunk(None, 31, True)
-    layer = MapLayer()
-    layer.batch_map()
-    layer.set_focus(*layout.origin)
-    scroller.add(mouse_layer, z=10)
-    scroller.add(layer, z=0)
+    building_layer = BuildingLayer()
+    input_layer = InputLayer()
+    terrain_layer = MapLayer()
+    terrain_layer.batch_map()
+    terrain_layer.set_focus(*layout.origin)
+    scroller.add(input_layer, z=10)
+    scroller.add(terrain_layer, z=0)
+    scroller.add(building_layer, z=5)
     director.window.push_handlers(keyboard)
     director.run(Scene(scroller))
 
