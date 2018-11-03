@@ -153,32 +153,43 @@ class MouseLayer(ScrollableLayer):
         self.last_hex = None
         self.mouse_sprites_batch = BatchNode()
         self.mouse_sprites_batch.position = layout.origin.x, layout.origin.y
+        self.selected_batch = BatchNode()
+        self.selected_batch.position = layout.origin.x, layout.origin.y
 
     def on_mouse_press(self, x, y, button, dy):
-        # print(f"last1: {self.last_hex}")
-        # print(self.mouse_sprites_batch.get_children())
-        x_pos, y_pos = director.get_virtual_coordinates(x, y)
-        # print(f"mouse click: x: {x}, y: {y}, button: {button}, dy?: {dy}. Director: {x_pos}, {y_pos}")
-
+        """
+        Right now, this is a test function
+        This overrides the function from the base class.
+        Args:
+            x: mouse x position.
+            y: mouse y position.
+            button: which button was pushed.
+            dy: no idea what this does.
+        """
         p = Point(x, y)
         raw = hex_math.pixel_to_hex(layout, p)
         h = hex_math.hex_round(raw)
         position = hex_math.hex_to_pixel(layout, h, False)
-        # print(f"hex coords: {raw}, rounded: {h}")
+        # Todo: Figure out the issue causing hexes to sometime not be properly selected, probably rouning.
 
-        anchor = sprite_width // 2, sprite_height // 2
-        sprite = Sprite(f"sprites/select.png", position=position, anchor=anchor)
-        self.mouse_sprites_batch.add(sprite, z=-h.r)
-        # print(f"hex? {self.last_hex == h}")
-        if self.last_hex is not None:
-            # self.remove(self.last_hex)
-            pass  # This doesn't seem to work yet, not sure why not.
-        self.add(self.mouse_sprites_batch)
-        self.last_hex = sprite
-        # print(f"last2: {self.last_hex}")
+        anchor = sprite_width / 2, sprite_height / 2
+        sprite = Sprite(f"sprites/select red border.png", position=position, anchor=anchor)
+        self.selected_batch.add(sprite, z=-h.r)
+        self.add(self.selected_batch)
 
     def on_mouse_motion(self, x, y, dx, dy):
-        pass
+        p = Point(x, y)
+        raw = hex_math.pixel_to_hex(layout, p)
+        h = hex_math.hex_round(raw)
+        position = hex_math.hex_to_pixel(layout, h, False)
+
+        anchor = sprite_width / 2, sprite_height / 2
+        sprite = Sprite(f"sprites/select.png", position=position, anchor=anchor)
+        self.mouse_sprites_batch.add(sprite, z=-h.r)
+        if self.last_hex is not None:
+                self.mouse_sprites_batch.remove(self.last_hex)
+        self.add(self.mouse_sprites_batch)
+        self.last_hex = sprite
         # print(f"mouse move: ({x}, {y}), dx: {dx}, dy: {dy}.")
 
 
@@ -189,7 +200,7 @@ class MouseLayer(ScrollableLayer):
         super().set_view(x, y, w, h, viewport_ox, viewport_oy)
 
 
-def MenuLayer(Menu):
+class MenuLayer(Menu):
     is_event_handler = True
 
     def __init__(self):
