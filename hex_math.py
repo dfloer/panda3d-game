@@ -90,66 +90,6 @@ def hex_linedraw(a, b):
     return results
 
 
-OffsetCoord = collections.namedtuple("OffsetCoord", ["col", "row"])
-EVEN = 1
-ODD = -1
-
-
-def qoffset_from_cube(offset, h):
-    col = h.q
-    row = h.r + (h.q + offset * (h.q & 1)) // 2
-    return OffsetCoord(col, row)
-
-
-def qoffset_to_cube(offset, h):
-    q = h.col
-    r = h.row - (h.col + offset * (h.col & 1)) // 2
-    s = -q - r
-    return hexagon(q, r, s)
-
-
-def roffset_from_cube(offset, h):
-    col = h.q + (h.r + offset * (h.r & 1)) // 2
-    row = h.r
-    return OffsetCoord(col, row)
-
-
-def roffset_to_cube(offset, h):
-    q = h.col - (h.row + offset * (h.row & 1)) // 2
-    r = h.row
-    s = -q - r
-    return hexagon(q, r, s)
-
-
-DoubledCoord = collections.namedtuple("DoubledCoord", ["col", "row"])
-
-
-def qdoubled_from_cube(h):
-    col = h.q
-    row = 2 * h.r + h.q
-    return DoubledCoord(col, row)
-
-
-def qdoubled_to_cube(h):
-    q = h.col
-    r = (h.row - h.col) // 2
-    s = -q - r
-    return hexagon(q, r, s)
-
-
-def rdoubled_from_cube(h):
-    col = 2 * h.q + h.r
-    row = h.r
-    return DoubledCoord(col, row)
-
-
-def rdoubled_to_cube(h):
-    q = (h.col - h.row) // 2
-    r = h.row
-    s = -q - r
-    return hexagon(q, r, s)
-
-
 Orientation = collections.namedtuple("Orientation", ["f0", "f1", "f2", "f3", "b0", "b1", "b2", "b3", "start_angle"])
 Layout = collections.namedtuple("Layout", ["orientation", "size", "origin"])
 layout_pointy = Orientation(math.sqrt(3.0), math.sqrt(3.0) / 2.0, 0.0, 3.0 / 2.0, math.sqrt(3.0) / 3.0, -1.0 / 3.0, 0.0, 2.0 / 3.0, 0.5)
