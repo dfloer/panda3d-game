@@ -109,13 +109,13 @@ class TerrainCell:
         self.building = building
         test_buildings = randint(0, 32)
         if test_buildings == 8:
-            self.sprite_id = 'A'
+            self.building = 'A'
         elif test_buildings == 16:
-            self.sprite_id = 'B'
+            self.building = 'B'
         elif test_buildings == 4:
-            self.sprite_id = "RB"
+            self.building = "RB"
         elif test_buildings == 2:
-            self.sprite_id = "HR"
+            self.building = "HR"
 
     def __str__(self):
         return f"Terrain: {self.terrain_type}, id: {self.sprite_id}, building: {self.building}."
@@ -224,14 +224,13 @@ class BuildingLayer(ScrollableLayer):
         for k, v in terrain_map.hexagon_map.items():
             building = v.building
             if building is not None:
-                print(building)
                 position = hex_math.hex_to_pixel(layout, k, False)
                 # Todo: Figure out the issue causing hexes to sometime not be properly selected, probably rouning.
 
                 anchor = sprite_width / 2, sprite_height / 2
-                sprite = Sprite(f"sprites/{v.sprite_id}.png", position=position, anchor=anchor)
-                self.selected_batch.add(sprite, z=-k.r)
-                self.add(self.selected_batch)
+                sprite = Sprite(f"sprites/{building}.png", position=position, anchor=anchor)
+                self.buildings_batch.add(sprite, z=-k.r)
+        self.add(self.buildings_batch)
 
     def plop_building(self, cell, building_id):
         """
@@ -260,9 +259,10 @@ if __name__ == "__main__":
     terrain_layer = MapLayer()
     terrain_layer.batch_map()
     terrain_layer.set_focus(*layout.origin)
-    scroller.add(input_layer, z=10)
+
+    scroller.add(input_layer, z=2)
     scroller.add(terrain_layer, z=0)
-    scroller.add(building_layer, z=5)
+    scroller.add(building_layer, z=1)
     director.window.push_handlers(keyboard)
     director.run(Scene(scroller))
 
