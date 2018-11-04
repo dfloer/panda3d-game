@@ -16,7 +16,7 @@ Point = namedtuple("Point", ["x", "y"])
 
 sprite_width = 64
 sprite_height = 32
-pointy_width = sprite_width / sqrt(3)
+pointy_width = round(sprite_width / sqrt(3))  # This is the distance from the center to one of the corners.
 window_title = "cocos2d hex test"
 
 window_width = 1280
