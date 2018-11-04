@@ -25,7 +25,7 @@ window_height = 800
 layout_size = Point(pointy_width, sprite_height)
 layout = hex_math.Layout(hex_math.layout_pointy, layout_size, Point(window_width // 2, window_height // 2))
 
-director.init(window_width, window_height, window_title)
+director.init(window_width, window_height, window_title, autoscale=False)
 keyboard = key.KeyStateHandler()
 scroller = ScrollingManager()
 
