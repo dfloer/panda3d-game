@@ -42,7 +42,7 @@ class Terrain:
         self.buildings = {}
 
 
-    def generate_chunk(self, center, chunk_dim=(31, 31), start=False):
+    def generate_chunk(self, center, chunk_dim=(31, 31)):
         """
         Generates a chunk, sized as given. Current algorithm is to generate a "rectangle". Why a rectangle? Because that's the shape of a window, and it allows chunks to be accessed as x/y coordinates of their centers.
         Args:
@@ -53,7 +53,7 @@ class Terrain:
         Returns:
             A dictionary of terrain hexes, containing chunk_size * chunk_size items.
         """
-        print(center, chunk_dim, start)
+        print(center, chunk_dim)
         x_dim, y_dim = chunk_dim
         chunk_cells = {}
         # Why all this futzing around with dimensions // 2? Because I wanted the start of the chunk to be centered in the middle of the chunk.
@@ -67,6 +67,7 @@ class Terrain:
                 if (r, q) == (0, 0):
                     print("Added start core.")
                     building = Building(0)
+                    self.add_building(building, h)
                     sprite_id = 7
                 chunk_cells[h] = TerrainCell(terrain_type,  sprite_id, building)
         # There is a better way to do this.
@@ -217,13 +218,11 @@ class BuildingLayer(ScrollableLayer):
         self.draw_buildings()
 
     def draw_buildings(self):
-        for k, v in terrain_map.hexagon_map.items():
-            building = v.building
-            if building is not None:
-                position = hex_math.hex_to_pixel(layout, k, False)
-                anchor = sprite_width / 2, sprite_height / 2
-                sprite = Sprite(f"sprites/{building.sprite_id}.png", position=position, anchor=anchor)
-                self.buildings_batch.add(sprite, z=-k.r)
+        for k, building in terrain_map.buildings.items():
+            position = hex_math.hex_to_pixel(layout, k, False)
+            anchor = sprite_width / 2, sprite_height / 2
+            sprite = Sprite(f"sprites/{building.sprite_id}.png", position=position, anchor=anchor)
+            self.buildings_batch.add(sprite, z=-k.r)
         self.add(self.buildings_batch)
 
     def plop_building(self, cell, building_id):
@@ -248,7 +247,7 @@ class MenuLayer(Menu):
 
 if __name__ == "__main__":
     terrain_map = Terrain()
-    terrain_map.generate_chunk(layout.origin, (7, 7), True)
+    terrain_map.generate_chunk(layout.origin, (7, 7))
     building_layer = BuildingLayer()
     input_layer = InputLayer()
     terrain_layer = MapLayer()
