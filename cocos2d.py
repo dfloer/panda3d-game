@@ -36,43 +36,54 @@ class Terrain:
     """
     def __init__(self, chunk_size=31, random_seed=42):
         self.hexagon_map = {}
+        self.city_cores = []
         self.random_seed = random_seed
         self.chunk_size = chunk_size
+        self.buildings = {}
 
 
-    def generate_chunk(self, center, chunk_radius=31, start=False):
+    def generate_chunk(self, center, chunk_dim=(31, 31), start=False):
         """
-        Generates a chunk, sized as given.
+        Generates a chunk, sized as given. Current algorithm is to generate a "rectangle". Why a rectangle? Because that's the shape of a window, and it allows chunks to be accessed as x/y coordinates of their centers.
         Args:
             start (bool): If this is True, this is the starting segment and doesn't need to be reconciled with neighbours.
-            chunk_radius (int): size of a chunk. A chunk will be a "hex" segment of this many tiles.
-                Must be odd, in order to have a center.
+            chunk_dim (int, int): size of a chunk. A chunk will be a segment of this many tiles.
+                Dimensions must be odd, in order to have a center.
             center (Hexagon): the q, r, and s coordinates for the center of the chunk.
         Returns:
             A dictionary of terrain hexes, containing chunk_size * chunk_size items.
         """
-        print(center, chunk_radius, start)
+        print(center, chunk_dim, start)
+        x_dim, y_dim = chunk_dim
         chunk_cells = {}
-        # if not start:
-        #     # Check each of the 6 corners for neighbours.
-        #     # Order is left, top left, top right, right, bottom right, bottom left.
-        #     corners = [(0, chunk_radius, -chunk_radius), (chunk_radius, 0, -chunk_radius), (chunk_radius, -chunk_radius, 0), (0, -chunk_radius, chunk_radius), (-chunk_radius, 0, chunk_radius), (-chunk_radius, chunk_radius, 0)]
-        #     for corner in corners:
-        #         print(corner)
-        #         pass
-        # else:
-
-        for q in range(-chunk_radius, chunk_radius + 1):
-            r1 = max(-chunk_radius, -q - chunk_radius)
-            r2 = min(chunk_radius, -q + chunk_radius)
-            for r in range(r1, r2 + 1):
-                t_id = randint(1, 6)
-                hex_cell = TerrainCell(t_id, t_id, None)
-                k = Hexagon(q, r, -q - r)
-                chunk_cells[k] = hex_cell
+        # Why all this futzing around with dimensions // 2? Because I wanted the start of the chunk to be centered in the middle of the chunk.
+        for r in range(-x_dim // 2 + 1, x_dim // 2 + 1):
+            r_offset = r // 2
+            for q in range(-(y_dim // 2) - r_offset, y_dim - (y_dim // 2) - r_offset):
+                h = Hexagon(q, r, -q - r)
+                terrain_type = randint(1, 6)
+                sprite_id = terrain_type
+                building = None
+                if (r, q) == (0, 0):
+                    print("Added start core.")
+                    building = Building(0)
+                    sprite_id = 7
+                chunk_cells[h] = TerrainCell(terrain_type,  sprite_id, building)
         # There is a better way to do this.
         for k, v in chunk_cells.items():
             self.hexagon_map[k] = v
+
+    def add_building(self, building, hex_coords):
+        """
+        Adds a building to the terrain.
+        Args:
+            building (Building): building object to add to the terrain map.
+            hex_coords (Hexagon): coordinates for the building.
+        Returns:
+            The building that was added.
+        """
+        self.buildings[hex_coords] = building
+
 
     def __len__(self):
         return len(self.hexagon_map)
@@ -89,6 +100,21 @@ class TerrainCell:
 
     def __str__(self):
         return f"Terrain: {self.terrain_type}, id: {self.sprite_id}, building: {self.building}."
+
+
+class Building:
+    """
+    A class to store the different buildings in.
+    """
+    _sprite_to_building = {0: "core claimed"}
+
+    def __init__(self, building_id):
+        self.building_id = building_id
+        self.sprite_id = self._sprite_to_building[building_id]
+
+    def __str__(self):
+        return f"Building with id: {self.building_id} and sprite: {self.sprite_id }."
+
 
 
 
@@ -195,10 +221,8 @@ class BuildingLayer(ScrollableLayer):
             building = v.building
             if building is not None:
                 position = hex_math.hex_to_pixel(layout, k, False)
-                # Todo: Figure out the issue causing hexes to sometime not be properly selected, probably rouning.
-
                 anchor = sprite_width / 2, sprite_height / 2
-                sprite = Sprite(f"sprites/{building}.png", position=position, anchor=anchor)
+                sprite = Sprite(f"sprites/{building.sprite_id}.png", position=position, anchor=anchor)
                 self.buildings_batch.add(sprite, z=-k.r)
         self.add(self.buildings_batch)
 
@@ -210,6 +234,7 @@ class BuildingLayer(ScrollableLayer):
             cell: where do we want to plop this building?
             building_id: id of the building to add.
         """
+        pass
 
 
 
@@ -223,7 +248,7 @@ class MenuLayer(Menu):
 
 if __name__ == "__main__":
     terrain_map = Terrain()
-    terrain_map.generate_chunk(None, 31, True)
+    terrain_map.generate_chunk(layout.origin, (7, 7), True)
     building_layer = BuildingLayer()
     input_layer = InputLayer()
     terrain_layer = MapLayer()
