@@ -30,27 +30,6 @@ keyboard = key.KeyStateHandler()
 scroller = ScrollingManager()
 
 
-def generate_map(radius):
-    """
-    Generates a hexagonal map with given radius.
-
-    Args:
-        radius (int): radius of the number of tiles to draw.
-    Returns:
-        A dictionary with the key being the cubic hex coordinates, and the value being the properties of the hex.
-        Right now, the properties can only contain the hex's sprite_id.
-    """
-    hex_map = {}
-    for q in range(-radius, radius + 1):
-        r1 = max(-radius, -q - radius)
-        r2 = min(radius, -q + radius)
-        for r in range(r1, r2 + 1):
-            hex_properties = {"sprite_id": randint(1, 6)}
-            k = Hexagon(q, r, -q - r)
-            hex_map[k] = hex_properties
-    return hex_map
-
-
 class Terrain:
     """
     A class to store the terrain.
@@ -107,15 +86,6 @@ class TerrainCell:
         self.terrain_type = terrain_type
         self.sprite_id = sprite_id
         self.building = building
-        test_buildings = randint(0, 32)
-        if test_buildings == 8:
-            self.building = 'A'
-        elif test_buildings == 16:
-            self.building = 'B'
-        elif test_buildings == 4:
-            self.building = "RB"
-        elif test_buildings == 2:
-            self.building = "HR"
 
     def __str__(self):
         return f"Terrain: {self.terrain_type}, id: {self.sprite_id}, building: {self.building}."
