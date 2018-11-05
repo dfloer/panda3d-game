@@ -38,40 +38,69 @@ class Terrain:
         self.city_cores = []
         self.random_seed = random_seed
         self.chunk_size = chunk_size
+        # Dictionary where the key is the hexagon the building pertains to, and the value is a Building instance.
         self.buildings = {}
+        # Dictionary where the key is the center and the value is a list of 4 hexs containing the 4 corner hexes.
+        self.chunk_list = {}
 
-
-    def generate_chunk(self, center, chunk_dim=(31, 31)):
+    def generate_chunk(self, center):
         """
         Generates a chunk, sized as given. Current algorithm is to generate a "rectangle". Why a rectangle? Because that's the shape of a window, and it allows chunks to be accessed as x/y coordinates of their centers.
         Args:
-            start (bool): If this is True, this is the starting segment and doesn't need to be reconciled with neighbours.
-            chunk_dim (int, int): size of a chunk. A chunk will be a segment of this many tiles.
-                Dimensions must be odd, in order to have a center.
             center (Hexagon): the q, r, and s coordinates for the center of the chunk.
         Returns:
             A dictionary of terrain hexes, containing chunk_size * chunk_size items.
         """
-        print(center, chunk_dim)
-        x_dim, y_dim = chunk_dim
-        chunk_cells = {}
-        # Why all this futzing around with dimensions // 2? Because I wanted the start of the chunk to be centered in the middle of the chunk.
-        for r in range(-x_dim // 2 + 1, x_dim // 2 + 1):
-            r_offset = r // 2
-            for q in range(-(y_dim // 2) - r_offset, y_dim - (y_dim // 2) - r_offset):
-                h = Hexagon(q, r, -q - r)
-                terrain_type = randint(1, 6)
-                sprite_id = terrain_type
-                building = None
-                if (r, q) == (0, 0):
-                    print("Added start core.")
-                    building = Building(0)
-                    self.add_building(building, h)
-                    sprite_id = 7
-                chunk_cells[h] = TerrainCell(terrain_type,  sprite_id, building)
-        # There is a better way to do this.
-        for k, v in chunk_cells.items():
-            self.hexagon_map[k] = v
+        print(center, self.chunk_size)
+        if center not in self.chunk_list.keys():
+            print(f"New chunk added at {center}.")
+            x_dim, y_dim = (self.chunk_size, self.chunk_size)
+            chunk_cells = {}
+            # Why all this futzing around with dimensions // 2? Because I wanted the start of the chunk to be centered in the middle of the chunk.
+            r_min = -x_dim // 2 + 1
+            r_max = x_dim // 2 + 1
+            for r in range(r_min, r_max):
+                r_offset = r // 2
+                q_min = -(y_dim // 2) - r_offset
+                q_max = y_dim // 2 + 1 - r_offset
+                for q in range(q_min, q_max):
+                    h = Hexagon(q, r, -q - r)
+                    terrain_type = randint(1, 6)
+                    sprite_id = terrain_type
+                    building = None
+                    chunk_cells[h] = TerrainCell(terrain_type, sprite_id, building)
+                    if (r, q) == (0, 0):
+                        building = Building(0)
+                        self.add_building(building, h)
+                        chunk_cells[h].sprite_id = 7
+
+            r1 = r_min
+            r2 = r_max - 1
+            c1 = [-(y_dim // 2) - r2 // 2, r2]  # top left
+            c2 = [y_dim // 2 - r2 // 2, r2]  # top right
+            c3 = [y_dim // 2 - r1 // 2, r1]  # bottom right
+            c4 = [-(y_dim // 2) - r1 // 2, r1]  # bottom left
+            corners = [Hexagon(*c1, -c1[0] - c1[1]), Hexagon(*c2, -c2[0] - c2[1]), Hexagon(*c3, -c3[0] - c3[1]), Hexagon(*c4, -c4[0] - c4[1])]
+            self.chunk_list[center] = corners
+            # There is a better way to do this.
+            for k, v in chunk_cells.items():
+                self.hexagon_map[k] = v
+
+    def fill_viewport_chunks(self):
+        """
+        Fills the viewport with hex chunks.
+        Chunks are assumed to be larger than the viewport. Note: This will cause issues with resizing.
+        """
+        # Subtract the size of a sprite off to make sure the hex we're checking against is always fully on screen.
+        w = scroller.view_w // 2 - sprite_width * 2
+        h = scroller.view_h // 2 - sprite_height * 2
+        x = scroller.fx
+        y = scroller.fy
+        top_left = hex_math.pixel_to_hex(layout, Point(x - w, y - h))
+        top_right = hex_math.pixel_to_hex(layout, Point(x + w, y - h))
+        bottom_right = hex_math.pixel_to_hex(layout, Point(x + w, y + h))
+        bottom_left = hex_math.pixel_to_hex(layout, Point(x - w, y + h))
+        print(top_left, top_right, bottom_left, bottom_right)
 
     def add_building(self, building, hex_coords):
         """
@@ -83,7 +112,7 @@ class Terrain:
             The building that was added.
         """
         self.buildings[hex_coords] = building
-
+        self.hexagon_map[hex_coords] = building
 
     def __len__(self):
         return len(self.hexagon_map)
@@ -106,7 +135,7 @@ class Building:
     """
     A class to store the different buildings in.
     """
-    _sprite_to_building = {0: "core claimed"}
+    _sprite_to_building = {0: "core claimed", 1: "RB"}
 
     def __init__(self, building_id):
         self.building_id = building_id
@@ -170,8 +199,9 @@ class InputLayer(ScrollableLayer):
             dy: no idea what this does.
         """
         p = Point(x + scroller.offset[0], y + scroller.offset[1])
-        raw = hex_math.pixel_to_hex(layout, p)
-        h = hex_math.hex_round(raw)
+        h = hex_math.pixel_to_hex(layout, p)
+        if button == 4:  # Right click.
+            print(h)
         position = hex_math.hex_to_pixel(layout, h, False)
         # Todo: Figure out the issue causing hexes to sometime not be properly selected, probably rouning.
 
@@ -182,8 +212,7 @@ class InputLayer(ScrollableLayer):
 
     def on_mouse_motion(self, x, y, dx, dy):
         p = Point(x + scroller.offset[0], y + scroller.offset[1])
-        raw = hex_math.pixel_to_hex(layout, p)
-        h = hex_math.hex_round(raw)
+        h = hex_math.pixel_to_hex(layout, p)
         position = hex_math.hex_to_pixel(layout, h, False)
 
         anchor = sprite_width / 2, sprite_height / 2
@@ -220,15 +249,19 @@ class BuildingLayer(ScrollableLayer):
             self.buildings_batch.add(sprite, z=-k.r)
         self.add(self.buildings_batch)
 
-    def plop_building(self, cell, building_id):
+    def plop_building(self, cell, building):
         """
         Adds the building with the given ID at the given location.
         Right now this is basically a stub to get the display code running, but this will need to be more complex as buildings actually do something.
         Args:
-            cell: where do we want to plop this building?
-            building_id: id of the building to add.
+            cell (Hexagon): where do we want to plop this building?
+            building (Building): id of the building to add.
         """
-        pass
+        position = hex_math.hex_to_pixel(layout, cell, False)
+        anchor = sprite_width / 2, sprite_height / 2
+        sprite = Sprite(f"sprites/{building.sprite_id}.png", position=position, anchor=anchor)
+        terrain_map.add_building(building, cell)
+        self.add(sprite, z=-cell.r)
 
 
 class InputScrolling(ScrollingManager):
@@ -249,11 +282,18 @@ class InputScrolling(ScrollingManager):
             self.offset[0] -= self.scroll_inc
         if key == 65361:  # left arrow
             self.offset[0] += self.scroll_inc
+        if key == 65461:  # numpad 5
+            self.offset = [0, 0]  # Resets entire view to default center.
         new_center = [sum(x) for x in zip(self.center, self.offset)]
-        self.set_focus(*new_center)
+        self.scroll(new_center)
+        terrain_map.fill_viewport_chunks()
 
     def set_focus(self, *args, **kwargs):
         super().set_focus(*args, **kwargs)
+
+    def scroll(self, new_center):
+
+        self.set_focus(*new_center)
 
 
 class MenuLayer(Menu):
@@ -266,8 +306,8 @@ class MenuLayer(Menu):
 
 if __name__ == "__main__":
     scroller = InputScrolling(layout.origin)
-    terrain_map = Terrain()
-    terrain_map.generate_chunk(layout.origin, (7, 7))
+    terrain_map = Terrain(21)
+    terrain_map.generate_chunk(Hexagon(0, 0, 0))
     building_layer = BuildingLayer()
     input_layer = InputLayer()
     terrain_layer = MapLayer()

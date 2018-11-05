@@ -109,6 +109,10 @@ def hex_to_pixel(layout, h, use_origin=True):
 
 
 def pixel_to_hex(layout, p):
+    return hex_round(raw_pixel_to_hex(layout, p))
+
+
+def raw_pixel_to_hex(layout, p):
     m = layout.orientation
     size = layout.size
     origin = layout.origin
@@ -134,4 +138,3 @@ def polygon_corners(layout, h):
     return corners
 
 # End of code from Redblob.
-
