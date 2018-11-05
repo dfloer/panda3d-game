@@ -27,7 +27,6 @@ layout = hex_math.Layout(hex_math.layout_pointy, layout_size, Point(window_width
 
 director.init(window_width, window_height, window_title, autoscale=False)
 keyboard = key.KeyStateHandler()
-scroller = ScrollingManager()
 
 
 class Terrain:
@@ -170,7 +169,7 @@ class InputLayer(ScrollableLayer):
             button: which button was pushed.
             dy: no idea what this does.
         """
-        p = Point(x, y)
+        p = Point(x + scroller.offset[0], y + scroller.offset[1])
         raw = hex_math.pixel_to_hex(layout, p)
         h = hex_math.hex_round(raw)
         position = hex_math.hex_to_pixel(layout, h, False)
@@ -182,7 +181,7 @@ class InputLayer(ScrollableLayer):
         self.add(self.selected_batch)
 
     def on_mouse_motion(self, x, y, dx, dy):
-        p = Point(x, y)
+        p = Point(x + scroller.offset[0], y + scroller.offset[1])
         raw = hex_math.pixel_to_hex(layout, p)
         h = hex_math.hex_round(raw)
         position = hex_math.hex_to_pixel(layout, h, False)
@@ -195,10 +194,6 @@ class InputLayer(ScrollableLayer):
         self.add(self.mouse_sprites_batch)
         self.last_hex = sprite
         # print(f"mouse move: ({x}, {y}), dx: {dx}, dy: {dy}.")
-
-    def on_key_press(self, key, modifiers):
-        print(key, modifiers)
-
 
     def set_view(self, x, y, w, h, viewport_ox=0, viewport_oy=0):
         """
@@ -236,6 +231,30 @@ class BuildingLayer(ScrollableLayer):
         pass
 
 
+class InputScrolling(ScrollingManager):
+    is_event_handler = True
+
+    def __init__(self, center):
+        super().__init__()
+        self.center = list(center)
+        self.scroll_inc = 10
+        self.offset = [0, 0]
+
+    def on_key_press(self, key, modifiers):
+        if key == 65362:  # up arrow
+            self.offset[1] -= self.scroll_inc
+        if key == 65364:  # down arrow
+            self.offset[1] += self.scroll_inc
+        if key == 65363:  # right arrow
+            self.offset[0] -= self.scroll_inc
+        if key == 65361:  # left arrow
+            self.offset[0] += self.scroll_inc
+        new_center = [sum(x) for x in zip(self.center, self.offset)]
+        self.set_focus(*new_center)
+
+    def set_focus(self, *args, **kwargs):
+        super().set_focus(*args, **kwargs)
+
 
 class MenuLayer(Menu):
     is_event_handler = True
@@ -246,6 +265,7 @@ class MenuLayer(Menu):
 
 
 if __name__ == "__main__":
+    scroller = InputScrolling(layout.origin)
     terrain_map = Terrain()
     terrain_map.generate_chunk(layout.origin, (7, 7))
     building_layer = BuildingLayer()
