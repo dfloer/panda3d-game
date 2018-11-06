@@ -133,6 +133,15 @@ class Terrain:
         self.buildings[hex_coords] = building
         self.hexagon_map[hex_coords].building = building
 
+    def remove_building(self, hex_coords):
+        """
+        Removes the building from a cell.
+        Args:
+            hex_coords (Hexagon): coordinates of cell to modify.
+        """
+        del self.buildings[hex_coords]
+        self.hexagon_map[hex_coords].building = None
+
     def __len__(self):
         return len(self.chunk_list) * self.chunk_size * self.chunk_size
 
@@ -251,6 +260,7 @@ class InputLayer(ScrollableLayer):
         self.selected_batch = BatchNode()
         self.selected_batch.position = layout.origin.x, layout.origin.y
         self.key = None
+        self.modifier = None
 
     def on_mouse_press(self, x, y, button, dy):
         """
@@ -274,6 +284,10 @@ class InputLayer(ScrollableLayer):
                 # Place a test building.
                 b = Building(1)
                 building_layer.plop_building(h, b)
+            elif self.key is ord('d'):
+                print("delete")
+                building_layer.remove_building(h)
+
 
     def on_mouse_motion(self, x, y, dx, dy):
         p = Point(x + scroller.offset[0], y + scroller.offset[1])
@@ -297,9 +311,11 @@ class InputLayer(ScrollableLayer):
 
     def on_key_press(self, key, modifiers):
         self.key = key
+        self.modifier = modifiers
 
     def on_key_release(self, key, modifiers):
         self.key = None
+        self.modifier = None
 
     def default_click(self, h):
         position = hex_math.hex_to_pixel(layout, h, False)
@@ -322,7 +338,10 @@ class BuildingLayer(ScrollableLayer):
         self.draw_buildings()
 
     def draw_buildings(self):
+        self.children = []
+        print('')
         for k, building in terrain_map.buildings.items():
+            print(k, building)
             position = hex_math.hex_to_pixel(layout, k, False)
             anchor = sprite_width / 2, sprite_height / 2
             sprite = Sprite(sprite_images[building.sprite_id], position=position, anchor=anchor)
@@ -342,6 +361,21 @@ class BuildingLayer(ScrollableLayer):
             self.draw_buildings()
         else:
             print("Building already exists, skipping.")
+
+    def remove_building(self, cell):
+        """
+        Removes a building.
+        Args:
+            cell (Hexagon): hex to remove the building from.
+        """
+        if cell not in terrain_map.buildings.keys():
+            print("No building.")
+        elif terrain_map.buildings[cell].building_id == 0:
+            print("Can't remove city cores.")
+        else:
+            terrain_map.remove_building(cell)
+            self.draw_buildings()
+
 
 
 class InputScrolling(ScrollingManager):
