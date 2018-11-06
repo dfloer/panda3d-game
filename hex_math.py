@@ -153,6 +153,6 @@ def get_hex_chunk(center, radius):
         r1 = max(-radius, -q - radius)
         r2 = min(radius, -q + radius)
         for r in range(r1, r2 + 1):
-            h = Hexagon(center.q + q, center.r + r, -q - r)
+            h = Hexagon(center.q + q, center.r + r, -(center.q + q) - (center.r + r))
             hexes += [h]
     return hexes

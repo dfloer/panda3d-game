@@ -219,7 +219,7 @@ class Building:
     """
     A class to store the different buildings in.
     """
-    _sprite_to_building = {0: "core claimed", 1: "RB"}
+    _sprite_to_building = {0: "core claimed", 1: "RB", 2: "HR", 3: "protection tower"}
 
     def __init__(self, building_id):
         self.building_id = building_id
@@ -300,6 +300,9 @@ class InputLayer(ScrollableLayer):
             elif self.key is ord('d'):
                 print("delete")
                 building_layer.remove_building(h)
+            elif self.key is ord('p'):
+                b = Building(3)
+                building_layer.plop_building(h, b)
 
 
     def on_mouse_motion(self, x, y, dx, dy):
@@ -371,6 +374,9 @@ class BuildingLayer(ScrollableLayer):
         """
         if cell not in terrain_map.buildings.keys():
             terrain_map.add_building(cell, building)
+            if building.building_id == 3:
+                terrain_map.add_safe_area(cell, 2, 3)
+                overlay_layer.draw_safe()
             self.draw_buildings()
         else:
             print("Building already exists, skipping.")
