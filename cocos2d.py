@@ -377,19 +377,19 @@ def load_images(path):
         sprite_id = os.path.splitext(file)[0]
         img = image.load(full_path)
         images[sprite_id] = img
-    print(images.keys())
     return images
 
 if __name__ == "__main__":
     scroller = InputScrolling(layout.origin)
     sprite_images = load_images("sprites/")
-    terrain_map = Terrain(31)
+    terrain_map = Terrain(11)
     terrain_map.generate_chunk(Hexagon(0, 0, 0))
     building_layer = BuildingLayer()
     input_layer = InputLayer()
     terrain_layer = MapLayer()
     terrain_layer.batch_map()
     terrain_layer.set_focus(*layout.origin)
+    terrain_map.fill_viewport_chunks()
 
     scroller.add(input_layer, z=2)
     scroller.add(terrain_layer, z=0)
