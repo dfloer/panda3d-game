@@ -116,9 +116,10 @@ class Terrain:
             self.chunk_list[center] = [k for k in chunk.chunk_cells.keys()]
             for k, v in chunk.chunk_cells.items():
                 self.hexagon_map[k] = v
+            if center == Hexagon(0, 0, 0):
+                self.add_building(center, Building(0))
 
-
-    def add_building(self, building, hex_coords):
+    def add_building(self, hex_coords, building):
         """
         Adds a building to the terrain.
         Args:
@@ -128,7 +129,7 @@ class Terrain:
             The building that was added.
         """
         self.buildings[hex_coords] = building
-        self.hexagon_map[hex_coords] = building
+        self.hexagon_map[hex_coords].building = building
 
     def __len__(self):
         return len(self.chunk_list) * self.chunk_size * self.chunk_size
@@ -174,7 +175,7 @@ class TerrainChunk:
         return len(self.chunk_cells)
 
     def __str__(self):
-        return f"Chunk at {self.center} contains {len(self.chunks_cells)} hexes."
+        return f"Chunk at {self.center} contains {len(self.chunks_cells)} hexes"
 
 
 class TerrainCell:
@@ -187,7 +188,7 @@ class TerrainCell:
         self.building = building
 
     def __str__(self):
-        return f"Terrain: {self.terrain_type}, id: {self.sprite_id}, building: {self.building}."
+        return f"Terrain: {self.terrain_type}, id: {self.sprite_id}, building: {self.building}"
 
 
 class Building:
@@ -201,7 +202,7 @@ class Building:
         self.sprite_id = self._sprite_to_building[building_id]
 
     def __str__(self):
-        return f"Building with id: {self.building_id} and sprite: {self.sprite_id }."
+        return f"Building with id: {self.building_id} and sprite: {self.sprite_id }"
 
 
 
@@ -247,28 +248,30 @@ class InputLayer(ScrollableLayer):
         self.mouse_sprites_batch.position = layout.origin.x, layout.origin.y
         self.selected_batch = BatchNode()
         self.selected_batch.position = layout.origin.x, layout.origin.y
+        self.key = None
 
     def on_mouse_press(self, x, y, button, dy):
         """
-        Right now, this is a test function
-        This overrides the function from the base class.
+        This is a test function for now.
+        Right click displays info, left click draws a red hex, and left click + button does things.
         Args:
-            x: mouse x position.
-            y: mouse y position.
-            button: which button was pushed.
-            dy: no idea what this does.
+            x (int): mouse x position.
+            y (int): mouse y position.
+            button (int): which button was pushed.
+            dy (int): no idea what this does.
         """
         p = Point(x + scroller.offset[0], y + scroller.offset[1])
         h = hex_math.pixel_to_hex(layout, p)
         if button == 4:  # Right click.
-            print(h)
-        position = hex_math.hex_to_pixel(layout, h, False)
-        # Todo: Figure out the issue causing hexes to sometime not be properly selected, probably rouning.
-
-        anchor = sprite_width / 2, sprite_height / 2
-        sprite = Sprite(sprite_images["select red border"], position=position, anchor=anchor)
-        self.selected_batch.add(sprite, z=-h.r)
-        self.add(self.selected_batch)
+            print(f"({h.q}, {h.r}, {h.s}). {terrain_map.hexagon_map[h]}")
+        # This will get split out into it
+        else:
+            if self.key is None:
+                self.default_click(h)
+            elif self.key is ord('q'):  # or 97
+                # Place a test building.
+                b = Building(1)
+                building_layer.plop_building(h, b)
 
     def on_mouse_motion(self, x, y, dx, dy):
         p = Point(x + scroller.offset[0], y + scroller.offset[1])
@@ -289,6 +292,21 @@ class InputLayer(ScrollableLayer):
         A stub to get things working.
         """
         super().set_view(x, y, w, h, viewport_ox, viewport_oy)
+
+    def on_key_press(self, key, modifiers):
+        self.key = key
+
+    def on_key_release(self, key, modifiers):
+        self.key = None
+
+    def default_click(self, h):
+        position = hex_math.hex_to_pixel(layout, h, False)
+        # Todo: Figure out the issue causing hexes to sometime not be properly selected, probably rouning.
+
+        anchor = sprite_width / 2, sprite_height / 2
+        sprite = Sprite(sprite_images["select red border"], position=position, anchor=anchor)
+        self.selected_batch.add(sprite, z=-h.r)
+        self.add(self.selected_batch)
 
 
 class BuildingLayer(ScrollableLayer):
@@ -317,11 +335,11 @@ class BuildingLayer(ScrollableLayer):
             cell (Hexagon): where do we want to plop this building?
             building (Building): id of the building to add.
         """
-        position = hex_math.hex_to_pixel(layout, cell, False)
-        anchor = sprite_width / 2, sprite_height / 2
-        sprite = Sprite(sprite_images[building.sprite_id], position=position, anchor=anchor)
-        terrain_map.add_building(building, cell)
-        self.add(sprite, z=-cell.r)
+        if cell not in terrain_map.buildings.keys():
+            terrain_map.add_building(cell, building)
+            self.draw_buildings()
+        else:
+            print("Building already exists, skipping.")
 
 
 class InputScrolling(ScrollingManager):
@@ -334,19 +352,26 @@ class InputScrolling(ScrollingManager):
         self.offset = [0, 0]
 
     def on_key_press(self, key, modifiers):
+        scroll = False
         if key == 65362:  # up arrow
             self.offset[1] -= self.scroll_inc
-        if key == 65364:  # down arrow
+            scroll = True
+        elif key == 65364:  # down arrow
             self.offset[1] += self.scroll_inc
-        if key == 65363:  # right arrow
+            scroll = True
+        elif key == 65363:  # right arrow
             self.offset[0] -= self.scroll_inc
-        if key == 65361:  # left arrow
+            scroll = True
+        elif key == 65361:  # left arrow
             self.offset[0] += self.scroll_inc
-        if key == 65461:  # numpad 5
+            scroll = True
+        elif key == 65461:  # numpad 5
             self.offset = [0, 0]  # Resets entire view to default center.
-        new_focus = [sum(x) for x in zip(self.center, self.offset)]
-        self.scroll(new_focus)
-        terrain_map.fill_viewport_chunks()
+            scroll = True
+        if scroll:
+            new_focus = [sum(x) for x in zip(self.center, self.offset)]
+            self.scroll(new_focus)
+            terrain_map.fill_viewport_chunks()
 
     def set_focus(self, *args, **kwargs):
         super().set_focus(*args, **kwargs)
@@ -383,8 +408,8 @@ if __name__ == "__main__":
     scroller = InputScrolling(layout.origin)
     sprite_images = load_images("sprites/")
     terrain_map = Terrain(11)
-    terrain_map.generate_chunk(Hexagon(0, 0, 0))
     building_layer = BuildingLayer()
+    terrain_map.generate_chunk(Hexagon(0, 0, 0))
     input_layer = InputLayer()
     terrain_layer = MapLayer()
     terrain_layer.batch_map()
@@ -394,6 +419,7 @@ if __name__ == "__main__":
     scroller.add(input_layer, z=2)
     scroller.add(terrain_layer, z=0)
     scroller.add(building_layer, z=1)
+    building_layer.draw_buildings()
     director.window.push_handlers(keyboard)
     director.run(Scene(scroller))
 
