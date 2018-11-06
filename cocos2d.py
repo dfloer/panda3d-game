@@ -117,6 +117,8 @@ class Terrain:
             for k, v in chunk.chunk_cells.items():
                 self.hexagon_map[k] = v
             if center == Hexagon(0, 0, 0):
+                self.hexagon_map[center].terrain_type = 7
+                self.hexagon_map[center].sprite_id = '7'
                 self.add_building(center, Building(0))
 
     def add_building(self, hex_coords, building):
