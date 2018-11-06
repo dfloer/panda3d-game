@@ -52,11 +52,12 @@ class Terrain:
         Fills the viewport with hex chunks.
         Chunks are assumed to be larger than the viewport. Note: This will cause issues with resizing.
         """
-        print(f"Chunks: {len(self.chunk_list)}. Map size: {len(self.hexagon_map)}.")
         chunks = self.find_visible_chunks()
+        before_size = len(self.chunk_list)
         for c in chunks:
             self.generate_chunk(c)
-        terrain_layer.batch_map()
+        if len(self.chunk_list) > before_size:  # Only redraw map if we've added hexes.
+            terrain_layer.batch_map()
 
 
     def find_visible_chunks(self):
@@ -69,7 +70,6 @@ class Terrain:
         y = scroller.fy
         screen_center = hex_math.pixel_to_hex(layout, Point(x, y))
         center = self.find_chunk_parent(screen_center)
-        print(f"Screen center: {screen_center}, chunk_center: {center}")
 
         # find the centers of the 8 chunks surrounding our chunk.
         # Start with the cross ones first
@@ -97,7 +97,6 @@ class Terrain:
         # Generate a chunk with myself in the middle.
         test_chunk = TerrainChunk(cell, self.chunk_size)
         to_check = test_chunk.chunk_cells.keys()
-        test_chunk = None
         for x in to_check:
             if x in self.chunk_list.keys():
                 return x
@@ -110,9 +109,7 @@ class Terrain:
         Args:
             center (Hexagon): hexagon representing the center of the chunk.
         """
-        print(center, center not in self.chunk_list.keys() )
         if center not in self.chunk_list.keys():
-            print("Creating Chunk:", center)
             chunk = TerrainChunk(center, self.chunk_size)
             self.chunk_list[center] = [k for k in chunk.chunk_cells.keys()]
             for k, v in chunk.chunk_cells.items():
@@ -152,15 +149,11 @@ class TerrainChunk:
         Returns:
             A dictionary of terrain hexes, containing chunk_size * chunk_size items.
         """
-        print(f"Creating new hex at: {center}, of size {self.chunk_size}.")
         x_dim, y_dim = (self.chunk_size, self.chunk_size)
         chunk_cells = {}
         # Why all this futzing around with dimensions // 2? Because I wanted the start of the chunk to be centered in the middle of the chunk.
         r_min = -x_dim // 2 + 1
         r_max = x_dim // 2 + 1
-        terrain_type = 1
-        if center == Hexagon(0, 0, 0):
-            terrain_type = 2
         for r in range(r_min, r_max):
             r_offset = r // 2
             q_min = -(y_dim // 2) - r_offset
@@ -169,10 +162,8 @@ class TerrainChunk:
                 qq = center.q + q
                 rr = center.r + r
                 h = Hexagon(qq, rr, -qq - rr)
-                if h == center:
-                    sprite_id = 7
-                else:
-                    sprite_id = terrain_type
+                terrain_type = randint(1, 6)
+                sprite_id = terrain_type
                 building = None
                 chunk_cells[h] = TerrainCell(terrain_type, sprite_id, building)
         return chunk_cells
@@ -225,6 +216,7 @@ class MapLayer(ScrollableLayer):
         """
         Generate the sprites to put into the render batch.
         """
+        self.children = []  # Hack. But I don't need many copies of the same hexes.
         for hexagon, hex_properties in terrain_map.hexagon_map.items():
             position = hex_math.hex_to_pixel(layout, hexagon, False)
             anchor = sprite_width // 2, sprite_height // 2
@@ -336,7 +328,7 @@ class InputScrolling(ScrollingManager):
     def __init__(self, center):
         super().__init__()
         self.center = list(center)
-        self.scroll_inc = 10
+        self.scroll_inc = 32
         self.offset = [0, 0]
 
     def on_key_press(self, key, modifiers):
@@ -372,7 +364,7 @@ class MenuLayer(Menu):
 
 if __name__ == "__main__":
     scroller = InputScrolling(layout.origin)
-    terrain_map = Terrain(7)
+    terrain_map = Terrain(31)
     terrain_map.generate_chunk(Hexagon(0, 0, 0))
     building_layer = BuildingLayer()
     input_layer = InputLayer()
