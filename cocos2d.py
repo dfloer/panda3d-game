@@ -116,10 +116,22 @@ class Terrain:
             self.chunk_list[center] = [k for k in chunk.chunk_cells.keys()]
             for k, v in chunk.chunk_cells.items():
                 self.hexagon_map[k] = v
-            if center == Hexagon(0, 0, 0):
-                self.hexagon_map[center].terrain_type = 7
-                self.hexagon_map[center].sprite_id = '7'
-                self.add_building(center, Building(0))
+                if k == Hexagon(0, 0, 0):
+                    self.hexagon_map[center].terrain_type = 7
+                    self.hexagon_map[center].sprite_id = '7'
+                    self.add_building(center, Building(0))
+
+    def add_safe_area(self, center, safe_type=0, radius=7):
+        """
+        Adds safety to terrain hexes. safe area around it.
+        Args:
+            center (Hexagon): center of the area to be made safe.
+            safe_type (int): 0 for unsafe, 1 for city-core safety, 2 for other safety.
+            radius (int): radius of the safe area.
+        """
+        safe_hexes = hex_math.get_hex_chunk(center, radius)
+        for h in safe_hexes:
+            self.hexagon_map[h].safe = safe_type
 
     def add_building(self, hex_coords, building):
         """
@@ -197,9 +209,10 @@ class TerrainCell:
         self.terrain_type = terrain_type
         self.sprite_id = sprite_id
         self.building = building
+        self.safe = 0
 
     def __str__(self):
-        return f"Terrain: {self.terrain_type}, id: {self.sprite_id}, building: {self.building}"
+        return f"Terrain: {self.terrain_type}, id: {self.sprite_id}, building: {self.building}, safe: {self.safe}"
 
 
 class Building:
@@ -377,6 +390,31 @@ class BuildingLayer(ScrollableLayer):
             self.draw_buildings()
 
 
+class OverlayLayer(ScrollableLayer):
+    def __init__(self):
+        super().__init__()
+        self.overlay_batch = BatchNode()
+        self.overlay_batch.position = layout.origin.x, layout.origin.y
+        self.draw_safe()
+
+    _neighbour_to_edge_sprite = {0: "right", 1: "bottom right", 2: "bottom left", 3: "left", 4: "top left", 5: "top right"}
+
+    def draw_safe(self):
+        for k, h in terrain_map.hexagon_map.items():
+            if h.safe != 0:
+                neighbours = [terrain_map.hexagon_map[hex_math.hex_neighbor(k, x)].safe for x in range(6)]
+                position = hex_math.hex_to_pixel(layout, k, False)
+                anchor = sprite_width / 2, sprite_height / 2
+                for idx, n in enumerate(neighbours):
+                    if n == 0:
+                        sprite_id = f"safe {self._neighbour_to_edge_sprite[idx]}"
+                        sprite = Sprite(sprite_images[sprite_id], position=position, anchor=anchor)
+                        # I should probably squash these images into one image first, but this works for now.
+                        self.overlay_batch.add(sprite, z=-k.r)
+        self.add(self.overlay_batch)
+
+    def set_focus(self, *args, **kwargs):
+        super().set_focus(*args, **kwargs)
 
 class InputScrolling(ScrollingManager):
     is_event_handler = True
@@ -451,10 +489,13 @@ if __name__ == "__main__":
     terrain_layer.batch_map()
     terrain_layer.set_focus(*layout.origin)
     terrain_map.fill_viewport_chunks()
+    terrain_map.add_safe_area(Hexagon(0, 0, 0), 1, 7)
+    overlay_layer = OverlayLayer()
 
-    scroller.add(input_layer, z=2)
+    scroller.add(input_layer, z=5)
     scroller.add(terrain_layer, z=0)
     scroller.add(building_layer, z=1)
+    scroller.add(overlay_layer, z=2)
     building_layer.draw_buildings()
     director.window.push_handlers(keyboard)
     director.run(Scene(scroller))

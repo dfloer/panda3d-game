@@ -4,12 +4,12 @@ import math
 
 # Below code from http://www.redblobgames.com/grids/hexagons/
 Point = collections.namedtuple("Point", ["x", "y"])
-_Hex = collections.namedtuple("Hex", ["q", "r", "s"])
+Hexagon = collections.namedtuple("Hex", ["q", "r", "s"])
 
 
 def hexagon(q, r, s):
     assert not (round(q + r + s) != 0), "q + r + s must be 0"
-    return _Hex(q, r, s)
+    return Hexagon(q, r, s)
 
 
 def hex_add(a, b):
@@ -138,3 +138,21 @@ def polygon_corners(layout, h):
     return corners
 
 # End of code from Redblob.
+
+def get_hex_chunk(center, radius):
+    """
+    Given a hexagon, returns all hexagons that would be in a chunk with the given radius.
+    Args:
+        center (Hexagon): center of the new chunk.
+        radius (int): distance from the center to an edge.
+    Returns:
+        List of hexagons in the hexagonal chunk.
+    """
+    hexes = []
+    for q in range(-radius, radius + 1):
+        r1 = max(-radius, -q - radius)
+        r2 = min(radius, -q + radius)
+        for r in range(r1, r2 + 1):
+            h = Hexagon(center.q + q, center.r + r, -q - r)
+            hexes += [h]
+    return hexes
