@@ -34,73 +34,90 @@ class Terrain:
     A class to store the terrain.
     """
     def __init__(self, chunk_size=31, random_seed=42):
-        self.hexagon_map = {}
         self.city_cores = []
         self.random_seed = random_seed
         self.chunk_size = chunk_size
         # Dictionary where the key is the hexagon the building pertains to, and the value is a Building instance.
         self.buildings = {}
-        # Dictionary where the key is the center and the value is a list of 4 hexs containing the 4 corner hexes.
+
+        # This seems is a bit of a hack, but it seems to work. Hopefully I won't regret it later.
+        # Chunk list has a key of the center of a chunk, and the values are the hexes inside that chunk.
+        # The actual terrain hexes are stored in hexagon_map, with their key being the hexagon from the chunk_list.
         self.chunk_list = {}
+        self.hexagon_map = {}
 
-    def generate_chunk(self, center):
-        """
-        Generates a chunk, sized as given. Current algorithm is to generate a "rectangle". Why a rectangle? Because that's the shape of a window, and it allows chunks to be accessed as x/y coordinates of their centers.
-        Args:
-            center (Hexagon): the q, r, and s coordinates for the center of the chunk.
-        Returns:
-            A dictionary of terrain hexes, containing chunk_size * chunk_size items.
-        """
-        print(center, self.chunk_size)
-        if center not in self.chunk_list.keys():
-            print(f"New chunk added at {center}.")
-            x_dim, y_dim = (self.chunk_size, self.chunk_size)
-            chunk_cells = {}
-            # Why all this futzing around with dimensions // 2? Because I wanted the start of the chunk to be centered in the middle of the chunk.
-            r_min = -x_dim // 2 + 1
-            r_max = x_dim // 2 + 1
-            for r in range(r_min, r_max):
-                r_offset = r // 2
-                q_min = -(y_dim // 2) - r_offset
-                q_max = y_dim // 2 + 1 - r_offset
-                for q in range(q_min, q_max):
-                    h = Hexagon(q, r, -q - r)
-                    terrain_type = randint(1, 6)
-                    sprite_id = terrain_type
-                    building = None
-                    chunk_cells[h] = TerrainCell(terrain_type, sprite_id, building)
-                    if (r, q) == (0, 0):
-                        building = Building(0)
-                        self.add_building(building, h)
-                        chunk_cells[h].sprite_id = 7
-
-            r1 = r_min
-            r2 = r_max - 1
-            c1 = [-(y_dim // 2) - r2 // 2, r2]  # top left
-            c2 = [y_dim // 2 - r2 // 2, r2]  # top right
-            c3 = [y_dim // 2 - r1 // 2, r1]  # bottom right
-            c4 = [-(y_dim // 2) - r1 // 2, r1]  # bottom left
-            corners = [Hexagon(*c1, -c1[0] - c1[1]), Hexagon(*c2, -c2[0] - c2[1]), Hexagon(*c3, -c3[0] - c3[1]), Hexagon(*c4, -c4[0] - c4[1])]
-            self.chunk_list[center] = corners
-            # There is a better way to do this.
-            for k, v in chunk_cells.items():
-                self.hexagon_map[k] = v
 
     def fill_viewport_chunks(self):
         """
         Fills the viewport with hex chunks.
         Chunks are assumed to be larger than the viewport. Note: This will cause issues with resizing.
         """
-        # Subtract the size of a sprite off to make sure the hex we're checking against is always fully on screen.
-        w = scroller.view_w // 2 - sprite_width * 2
-        h = scroller.view_h // 2 - sprite_height * 2
+        print(f"Chunks: {len(self.chunk_list)}. Map size: {len(self.hexagon_map)}.")
+        chunks = self.find_visible_chunks()
+        for c in chunks:
+            self.generate_chunk(c)
+        terrain_layer.batch_map()
+
+
+    def find_visible_chunks(self):
+        """
+        Used to find the visible chunks in a viewport. May return chunks that aren't quite visible to be safe.
+        Returns:
+            A list of TerrainChunk objects that are visible in the current viewport.
+        """
         x = scroller.fx
         y = scroller.fy
-        top_left = hex_math.pixel_to_hex(layout, Point(x - w, y - h))
-        top_right = hex_math.pixel_to_hex(layout, Point(x + w, y - h))
-        bottom_right = hex_math.pixel_to_hex(layout, Point(x + w, y + h))
-        bottom_left = hex_math.pixel_to_hex(layout, Point(x - w, y + h))
-        print(top_left, top_right, bottom_left, bottom_right)
+        screen_center = hex_math.pixel_to_hex(layout, Point(x, y))
+        center = self.find_chunk_parent(screen_center)
+        print(f"Screen center: {screen_center}, chunk_center: {center}")
+
+        # find the centers of the 8 chunks surrounding our chunk.
+        # Start with the cross ones first
+        q_offset = self.chunk_size // 2
+        left = Hexagon(center.q - self.chunk_size, center.r, -(center.q - self.chunk_size) - center.r)
+        right = Hexagon(center.q + self.chunk_size, center.r, -(center.q + self.chunk_size) - center.r)
+        up = Hexagon(center.q - q_offset, center.r + self.chunk_size, -(center.q +-q_offset) - (center.r + self.chunk_size))
+        down = Hexagon(center.q + q_offset + 1, center.r - self.chunk_size, -(center.q + q_offset + 1) - (center.r - self.chunk_size))
+        # And the four diagonals, based on the previous ones.
+        up_left = Hexagon(up.q - self.chunk_size, up.r, -(up.q - self.chunk_size) - up.r)
+        up_right = Hexagon(up.q + self.chunk_size, up.r, -(up.q + self.chunk_size) - up.r)
+        down_left = Hexagon(down.q - self.chunk_size, down.r, -(down.q - self.chunk_size) - down.r)
+        down_right = Hexagon(down.q + self.chunk_size, down.r, -(down.q + self.chunk_size) - down.r)
+
+        return up, down, left, right, up_left, up_right, down_left, down_right
+
+    def find_chunk_parent(self, cell):
+        """
+        Given a cell, which chunk does it belong to?
+        Args:
+            cell (Hexagon): cell we're interested in knowing the chunk of.
+        Returns:
+            Hexagon pointing to the center of the chunk.
+        """
+        # Generate a chunk with myself in the middle.
+        test_chunk = TerrainChunk(cell, self.chunk_size)
+        to_check = test_chunk.chunk_cells.keys()
+        test_chunk = None
+        for x in to_check:
+            if x in self.chunk_list.keys():
+                return x
+        return cell
+
+
+    def generate_chunk(self, center):
+        """
+        Generates a chunk. See note in init function about how hacky this is.
+        Args:
+            center (Hexagon): hexagon representing the center of the chunk.
+        """
+        print(center, center not in self.chunk_list.keys() )
+        if center not in self.chunk_list.keys():
+            print("Creating Chunk:", center)
+            chunk = TerrainChunk(center, self.chunk_size)
+            self.chunk_list[center] = [k for k in chunk.chunk_cells.keys()]
+            for k, v in chunk.chunk_cells.items():
+                self.hexagon_map[k] = v
+
 
     def add_building(self, building, hex_coords):
         """
@@ -115,7 +132,56 @@ class Terrain:
         self.hexagon_map[hex_coords] = building
 
     def __len__(self):
-        return len(self.hexagon_map)
+        return len(self.chunk_list) * self.chunk_size * self.chunk_size
+
+
+class TerrainChunk:
+    """
+    Stores metadata and data related to a terrain chunk.
+    """
+    def __init__(self, center, chunk_size):
+        self.center = center
+        self.chunk_size = chunk_size
+        self.chunk_cells = self.generate(self.center)
+
+    def generate(self, center):
+        """
+        Generates a chunk, sized as given. Current algorithm is to generate a "rectangle". Why a rectangle? Because that's the shape of a window, and it allows chunks to be accessed as x/y coordinates of their centers.
+        Args:
+            center (Hexagon): the q, r, and s coordinates for the center of the chunk.
+        Returns:
+            A dictionary of terrain hexes, containing chunk_size * chunk_size items.
+        """
+        print(f"Creating new hex at: {center}, of size {self.chunk_size}.")
+        x_dim, y_dim = (self.chunk_size, self.chunk_size)
+        chunk_cells = {}
+        # Why all this futzing around with dimensions // 2? Because I wanted the start of the chunk to be centered in the middle of the chunk.
+        r_min = -x_dim // 2 + 1
+        r_max = x_dim // 2 + 1
+        terrain_type = 1
+        if center == Hexagon(0, 0, 0):
+            terrain_type = 2
+        for r in range(r_min, r_max):
+            r_offset = r // 2
+            q_min = -(y_dim // 2) - r_offset
+            q_max = y_dim // 2 + 1 - r_offset
+            for q in range(q_min, q_max):
+                qq = center.q + q
+                rr = center.r + r
+                h = Hexagon(qq, rr, -qq - rr)
+                if h == center:
+                    sprite_id = 7
+                else:
+                    sprite_id = terrain_type
+                building = None
+                chunk_cells[h] = TerrainCell(terrain_type, sprite_id, building)
+        return chunk_cells
+
+    def __len__(self):
+        return len(self.chunk_cells)
+
+    def __str__(self):
+        return f"Chunk at {self.center} contains {len(self.chunks_cells)} hexes."
 
 
 class TerrainCell:
@@ -284,8 +350,8 @@ class InputScrolling(ScrollingManager):
             self.offset[0] += self.scroll_inc
         if key == 65461:  # numpad 5
             self.offset = [0, 0]  # Resets entire view to default center.
-        new_center = [sum(x) for x in zip(self.center, self.offset)]
-        self.scroll(new_center)
+        new_focus = [sum(x) for x in zip(self.center, self.offset)]
+        self.scroll(new_focus)
         terrain_map.fill_viewport_chunks()
 
     def set_focus(self, *args, **kwargs):
@@ -306,7 +372,7 @@ class MenuLayer(Menu):
 
 if __name__ == "__main__":
     scroller = InputScrolling(layout.origin)
-    terrain_map = Terrain(21)
+    terrain_map = Terrain(7)
     terrain_map.generate_chunk(Hexagon(0, 0, 0))
     building_layer = BuildingLayer()
     input_layer = InputLayer()
