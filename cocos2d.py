@@ -5,11 +5,13 @@ from cocos.batch import BatchNode
 from cocos.sprite import Sprite
 from cocos.menu import Menu
 from pyglet.window import key
+from pyglet import image
 
 import hex_math
 from random import randint
 from collections import namedtuple
 from math import sqrt
+import os
 
 Hexagon = namedtuple("Hex", ["q", "r", "s"])
 Point = namedtuple("Point", ["x", "y"])
@@ -162,7 +164,7 @@ class TerrainChunk:
                 qq = center.q + q
                 rr = center.r + r
                 h = Hexagon(qq, rr, -qq - rr)
-                terrain_type = randint(1, 6)
+                terrain_type = str(randint(1, 6))
                 sprite_id = terrain_type
                 building = None
                 chunk_cells[h] = TerrainCell(terrain_type, sprite_id, building)
@@ -221,7 +223,7 @@ class MapLayer(ScrollableLayer):
             position = hex_math.hex_to_pixel(layout, hexagon, False)
             anchor = sprite_width // 2, sprite_height // 2
             sprite_id = hex_properties.sprite_id
-            sprite = Sprite(f"sprites/{sprite_id}.png", position=position, anchor=anchor)
+            sprite = Sprite(sprite_images[sprite_id], position=position, anchor=anchor)
             self.map_sprites_batch.add(sprite, z=-hexagon.r)
         self.add(self.map_sprites_batch)
 
@@ -264,7 +266,7 @@ class InputLayer(ScrollableLayer):
         # Todo: Figure out the issue causing hexes to sometime not be properly selected, probably rouning.
 
         anchor = sprite_width / 2, sprite_height / 2
-        sprite = Sprite(f"sprites/select red border.png", position=position, anchor=anchor)
+        sprite = Sprite(sprite_images["select red border"], position=position, anchor=anchor)
         self.selected_batch.add(sprite, z=-h.r)
         self.add(self.selected_batch)
 
@@ -274,7 +276,7 @@ class InputLayer(ScrollableLayer):
         position = hex_math.hex_to_pixel(layout, h, False)
 
         anchor = sprite_width / 2, sprite_height / 2
-        sprite = Sprite(f"sprites/select.png", position=position, anchor=anchor)
+        sprite = Sprite(sprite_images["select"], position=position, anchor=anchor)
         self.mouse_sprites_batch.add(sprite, z=-h.r)
         if self.last_hex is not None:
                 self.mouse_sprites_batch.remove(self.last_hex)
@@ -303,7 +305,7 @@ class BuildingLayer(ScrollableLayer):
         for k, building in terrain_map.buildings.items():
             position = hex_math.hex_to_pixel(layout, k, False)
             anchor = sprite_width / 2, sprite_height / 2
-            sprite = Sprite(f"sprites/{building.sprite_id}.png", position=position, anchor=anchor)
+            sprite = Sprite(sprite_images[building.sprite_id], position=position, anchor=anchor)
             self.buildings_batch.add(sprite, z=-k.r)
         self.add(self.buildings_batch)
 
@@ -317,7 +319,7 @@ class BuildingLayer(ScrollableLayer):
         """
         position = hex_math.hex_to_pixel(layout, cell, False)
         anchor = sprite_width / 2, sprite_height / 2
-        sprite = Sprite(f"sprites/{building.sprite_id}.png", position=position, anchor=anchor)
+        sprite = Sprite(sprite_images[building.sprite_id], position=position, anchor=anchor)
         terrain_map.add_building(building, cell)
         self.add(sprite, z=-cell.r)
 
@@ -361,9 +363,26 @@ class MenuLayer(Menu):
         super().__init__()
 
 
+def load_images(path):
+    """
+    Loads the sprites from the given path.
+    Args:
+        path: Path to sprites directory, loads everything in it.
+    Returns:
+        Dictionary contraining the sprites. Key is the sprites filename without extension, value is a Sprite object.
+    """
+    images = {}
+    for file in os.listdir(path):
+        full_path = os.path.join(path, file)
+        sprite_id = os.path.splitext(file)[0]
+        img = image.load(full_path)
+        images[sprite_id] = img
+    print(images.keys())
+    return images
 
 if __name__ == "__main__":
     scroller = InputScrolling(layout.origin)
+    sprite_images = load_images("sprites/")
     terrain_map = Terrain(31)
     terrain_map.generate_chunk(Hexagon(0, 0, 0))
     building_layer = BuildingLayer()
