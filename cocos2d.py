@@ -640,8 +640,8 @@ if __name__ == "__main__":
     network_layer = NetworkLayer()
 
     scroller.add(terrain_layer, z=0)
-    scroller.add(building_layer, z=1)
-    scroller.add(network_layer, z=2)
+    scroller.add(network_layer, z=1)
+    scroller.add(building_layer, z=2)
     scroller.add(overlay_layer, z=3)
     scroller.add(input_layer, z=5)
     building_layer.draw_buildings()
