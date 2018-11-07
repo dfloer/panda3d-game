@@ -304,6 +304,7 @@ class InputLayer(ScrollableLayer):
             elif self.key is ord('d'):
                 print("delete")
                 building_layer.remove_building(h)
+                network_layer.remove_network(h)
             elif self.key is ord('p'):
                 b = Building(3)
             elif self.key is ord('e'):
@@ -502,7 +503,7 @@ class NetworkLayer(ScrollableLayer):
             anchor = sprite_width / 2, sprite_height / 2
             sprite = Sprite(sprite_images["energy network center on"], position=position, anchor=anchor)
             try:
-                self.network_batch.add(sprite, z=-k.r - 10, name=f"{k.q}_{k.r}_{k.s}e_7")
+                self.network_batch.add(sprite, z=-k.r - 10, name=f"{k.q}_{k.r}_{k.s}_6")
             except Exception:
                 pass
             for idx, n in enumerate(neighbours):
@@ -533,7 +534,28 @@ class NetworkLayer(ScrollableLayer):
             print("Network already exists, skipping.")
 
     def remove_network(self, cell):
-        pass
+        if cell not in network_map.network.keys():
+            print("No network.")
+        elif network_map.network[cell]["type"] == "start":
+            print("Can't remove city core network.")
+        else:
+            del network_map.network[cell]
+            for idx in range(0, 7):
+                try:
+                    self.network_batch.remove(f"{cell.q}_{cell.r}_{cell.s}_{idx}")
+                except Exception:
+                    pass  # This sprite must already exist, so we skip it.
+
+            # And cleanup neighbours.
+            # Code presently removes all but center sprite from neighbours, but they'll be redrawn. Todo: fix
+            for x in range(6):
+                n = hex_math.hex_neighbor(cell, x)
+                for y in range(6):
+                    try:
+                        self.network_batch.remove(f"{n.q}_{n.r}_{n.s}_{y}")
+                    except Exception:
+                        pass  # This sprite must already exist, so we skip it.)
+            self.draw_network()
 
     def set_focus(self, *args, **kwargs):
         super().set_focus(*args, **kwargs)
