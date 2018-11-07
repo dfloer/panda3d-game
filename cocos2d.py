@@ -123,7 +123,8 @@ class Terrain:
 
     def add_safe_area(self, center, safe_type=0, radius=7):
         """
-        Adds safety to terrain hexes. safe area around it.
+        Adds safety to terrain hexes. Can also be used to remove safety, by setting safe_type=0.
+        City core safe area is highest priority and can't be overridden or removed.
         Args:
             center (Hexagon): center of the area to be made safe.
             safe_type (int): 0 for unsafe, 1 for city-core safety, 2 for other safety.
@@ -131,7 +132,10 @@ class Terrain:
         """
         safe_hexes = hex_math.get_hex_chunk(center, radius)
         for h in safe_hexes:
+            if self.hexagon_map[h].safe == 1:
+                continue
             self.hexagon_map[h].safe = safe_type
+
 
     def add_building(self, hex_coords, building):
         """
@@ -394,9 +398,13 @@ class BuildingLayer(ScrollableLayer):
             print("Can't remove city cores.")
         else:
             name = f"{cell.q}_{cell.r}_{cell.s}"
+            building_id = terrain_map.buildings[cell].building_id
             terrain_map.remove_building(cell)
             self.buildings_batch.remove(name)
             self.draw_buildings()
+            if building_id == 3:
+                terrain_map.add_safe_area(cell, 0, 3)
+                overlay_layer.draw_safe()
 
 
 class OverlayLayer(ScrollableLayer):
@@ -415,11 +423,36 @@ class OverlayLayer(ScrollableLayer):
                 position = hex_math.hex_to_pixel(layout, k, False)
                 anchor = sprite_width / 2, sprite_height / 2
                 for idx, n in enumerate(neighbours):
+                    # print(h.safe, neighbours)
                     if n == 0:
                         sprite_id = f"safe {self._neighbour_to_edge_sprite[idx]}"
                         sprite = Sprite(sprite_images[sprite_id], position=position, anchor=anchor)
                         # I should probably squash these images into one image first, but this works for now.
-                        self.overlay_batch.add(sprite, z=-k.r)
+                        try:
+                            self.overlay_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}_{idx}")
+                        except Exception:
+                            pass
+                    else:
+                        # In this case, we may have already drawn an overlay here that needs to be removed.
+                        # Try to remove it.
+                        try:
+                            self.overlay_batch.remove(f"{k.q}_{k.r}_{k.s}_{idx}")
+                        except Exception:
+                            pass
+            else:
+                # Now we check hexes that aren't safe that may have been drawn on. There seems like there is a better way to do this...
+                neighbours = []
+                for x in range(6):
+                    try:
+                        neighbours += [terrain_map.hexagon_map[hex_math.hex_neighbor(k, x)].safe]
+                    except KeyError:
+                        pass  # We're off the edge of the hexes we've made. ToDo: limit to viewport?
+                for idx, n in enumerate(neighbours):
+                    if n == 0:
+                        try:
+                            self.overlay_batch.remove(f"{k.q}_{k.r}_{k.s}_{idx}")
+                        except Exception:
+                            pass
         self.add(self.overlay_batch)
 
     def set_focus(self, *args, **kwargs):
