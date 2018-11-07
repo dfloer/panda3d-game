@@ -127,14 +127,14 @@ class Terrain:
         City core safe area is highest priority and can't be overridden or removed.
         Args:
             center (Hexagon): center of the area to be made safe.
-            safe_type (int): 0 for unsafe, 1 for city-core safety, 2 for other safety.
+            safe_type (int): 0 for unsafe, 1 for city-core safety, 2 for other safety, -2 to remove other safety.
             radius (int): radius of the safe area.
         """
         safe_hexes = hex_math.get_hex_chunk(center, radius)
         for h in safe_hexes:
             if self.hexagon_map[h].safe == 1:
                 continue
-            self.hexagon_map[h].safe = safe_type
+            self.hexagon_map[h].safe += safe_type
 
 
     def add_building(self, hex_coords, building):
@@ -403,7 +403,7 @@ class BuildingLayer(ScrollableLayer):
             self.buildings_batch.remove(name)
             self.draw_buildings()
             if building_id == 3:
-                terrain_map.add_safe_area(cell, 0, 3)
+                terrain_map.add_safe_area(cell, -2, 3)
                 overlay_layer.draw_safe()
 
 
