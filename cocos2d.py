@@ -355,13 +355,14 @@ class BuildingLayer(ScrollableLayer):
 
     def draw_buildings(self):
         self.children = []
-        print('')
         for k, building in terrain_map.buildings.items():
-            print(k, building)
             position = hex_math.hex_to_pixel(layout, k, False)
             anchor = sprite_width / 2, sprite_height / 2
             sprite = Sprite(sprite_images[building.sprite_id], position=position, anchor=anchor)
-            self.buildings_batch.add(sprite, z=-k.r)
+            try:
+                self.buildings_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
+            except Exception:
+                pass  # This sprite must already exist, so we skip it.
         self.add(self.buildings_batch)
 
     def plop_building(self, cell, building):
@@ -392,7 +393,9 @@ class BuildingLayer(ScrollableLayer):
         elif terrain_map.buildings[cell].building_id == 0:
             print("Can't remove city cores.")
         else:
+            name = f"{cell.q}_{cell.r}_{cell.s}"
             terrain_map.remove_building(cell)
+            self.buildings_batch.remove(name)
             self.draw_buildings()
 
 
