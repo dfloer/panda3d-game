@@ -223,7 +223,7 @@ class Building:
     """
     A class to store the different buildings in.
     """
-    _sprite_to_building = {0: "core claimed", 1: "RB", 2: "HR", 3: "protection tower"}
+    _sprite_to_building = {0: "core claimed", 1: "RB", 2: "HR", 3: "protection tower", 4: "network energy test"}
 
     def __init__(self, building_id):
         self.building_id = building_id
@@ -295,17 +295,20 @@ class InputLayer(ScrollableLayer):
             print(f"({h.q}, {h.r}, {h.s}). {terrain_map.hexagon_map[h]}")
         # This will get split out into it
         else:
+            b = None
             if self.key is None:
                 self.default_click(h)
             elif self.key is ord('q'):  # or 97
                 # Place a test building.
                 b = Building(1)
-                building_layer.plop_building(h, b)
             elif self.key is ord('d'):
                 print("delete")
                 building_layer.remove_building(h)
             elif self.key is ord('p'):
                 b = Building(3)
+            elif self.key is ord('e'):
+                network_layer.plop_network(h, "energy")
+            if b is not None:
                 building_layer.plop_building(h, b)
 
 
@@ -458,6 +461,84 @@ class OverlayLayer(ScrollableLayer):
     def set_focus(self, *args, **kwargs):
         super().set_focus(*args, **kwargs)
 
+
+class Network:
+    """
+    Class to store the data structures related to the networks.
+    I've split these from the terrain because I think there's going to be some significant complexity here.
+    """
+    def __init__(self):
+        """
+        Dictionary will be of the form {Hexagon(q, r, s): {"type": network type}, ...}
+        Possible values for network type are "energy" and "control".
+        """
+        self.network = {Hexagon(0, 0, 0): {"type": "start"}}
+
+    def __len__(self):
+        return len(self.network)
+
+
+class NetworkLayer(ScrollableLayer):
+    _neighbour_to_edge_sprite = {0: "right", 1: "bottom right", 2: "bottom left", 3: "left", 4: "top left", 5: "top right"}
+    def __init__(self):
+        super().__init__()
+        self.network_batch = BatchNode()
+        self.network_batch.position = layout.origin.x, layout.origin.y
+
+    def draw_network(self):
+        """
+        Handles drawing of the network.
+        """
+        for k, h in network_map.network.items():
+            if h["type"] == "start":
+                continue
+            neighbours = []
+            for x in range(6):
+                try:
+                    neighbours += [network_map.network[hex_math.hex_neighbor(k, x)]]
+                except Exception:
+                    neighbours += [{"type": None}]
+            position = hex_math.hex_to_pixel(layout, k, False)
+            anchor = sprite_width / 2, sprite_height / 2
+            sprite = Sprite(sprite_images["energy network center on"], position=position, anchor=anchor)
+            try:
+                self.network_batch.add(sprite, z=-k.r - 10, name=f"{k.q}_{k.r}_{k.s}e_7")
+            except Exception:
+                pass
+            for idx, n in enumerate(neighbours):
+                if n["type"] in (h["type"], "start"):
+                    try:
+                        sprite_name = f"energy network {self._neighbour_to_edge_sprite[idx]} on"
+                    except Exception:
+                        pass
+                    sprite = Sprite(sprite_images[sprite_name], position=position, anchor=anchor)
+                    try:
+                        self.network_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}_{idx}")
+                    except Exception:
+                        pass  # This sprite must already exist, so we skip it.
+        self.add(self.network_batch)
+
+    def plop_network(self, cell, network_type="energy"):
+        """
+        Adds the network with the given type at the current tile.
+        Mostly a stub to get things working right now.
+        Args:
+            cell (Hexagon): where do we want to plop this building?
+            network_type (str): id of the building to add.
+        """
+        if cell not in network_map.network.keys():
+            network_map.network[cell] = {"type": network_type}
+            self.draw_network()
+        else:
+            print("Network already exists, skipping.")
+
+    def remove_network(self, cell):
+        pass
+
+    def set_focus(self, *args, **kwargs):
+        super().set_focus(*args, **kwargs)
+
+
 class InputScrolling(ScrollingManager):
     is_event_handler = True
 
@@ -533,11 +614,14 @@ if __name__ == "__main__":
     terrain_map.fill_viewport_chunks()
     terrain_map.add_safe_area(Hexagon(0, 0, 0), 1, 7)
     overlay_layer = OverlayLayer()
+    network_map = Network()
+    network_layer = NetworkLayer()
 
-    scroller.add(input_layer, z=5)
     scroller.add(terrain_layer, z=0)
     scroller.add(building_layer, z=1)
-    scroller.add(overlay_layer, z=2)
+    scroller.add(network_layer, z=2)
+    scroller.add(overlay_layer, z=3)
+    scroller.add(input_layer, z=5)
     building_layer.draw_buildings()
     director.window.push_handlers(keyboard)
     director.run(Scene(scroller))
