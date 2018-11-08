@@ -279,6 +279,7 @@ class InputLayer(ScrollableLayer):
         self.selected_batch.position = layout.origin.x, layout.origin.y
         self.key = None
         self.modifier = None
+        self.selection = set()
 
     def on_mouse_press(self, x, y, button, dy):
         """
@@ -348,7 +349,12 @@ class InputLayer(ScrollableLayer):
 
         anchor = sprite_width / 2, sprite_height / 2
         sprite = Sprite(sprite_images["select red border"], position=position, anchor=anchor)
-        self.selected_batch.add(sprite, z=-h.r)
+        try:
+            self.selected_batch.add(sprite, z=-h.r, name=f"{h.q}_{h.r}_{h.s}_red")
+            self.selection.add(h)
+        except Exception:
+            self.selected_batch.remove(f"{h.q}_{h.r}_{h.s}_red")
+            self.selection.remove(h)
         self.add(self.selected_batch)
 
 
