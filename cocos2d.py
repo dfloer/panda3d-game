@@ -385,7 +385,7 @@ class BuildingLayer(ScrollableLayer):
         if cell not in terrain_map.buildings.keys():
             network_layer.plop_network(cell, "sink")
             terrain_map.add_building(cell, building)
-            if building.building_id == 3:
+            if building.building_id == 3 and network_map.network[cell]["powered"]:
                 terrain_map.add_safe_area(cell, 2, 3)
                 overlay_layer.draw_safe()
             self.draw_buildings()
@@ -408,7 +408,7 @@ class BuildingLayer(ScrollableLayer):
             terrain_map.remove_building(cell)
             self.buildings_batch.remove(name)
             self.draw_buildings()
-            if building_id == 3:
+            if building_id == 3 and network_map.network[cell]["powered"]:
                 terrain_map.add_safe_area(cell, -2, 3)
                 overlay_layer.draw_safe()
 
@@ -484,10 +484,24 @@ class Network:
         """
         powered = self.find_all_connected(Hexagon(0, 0, 0))
         for n in self.network:
+            previous_powered = self.network[n]["powered"]
             if n in powered:
                 self.network[n]["powered"] = True
             else:
                 self.network[n]["powered"] = False
+            try:
+                if terrain_map.buildings[n].building_id == 3:
+                    p = 0
+                    # This tile is making the transition from unpowered to powered
+                    if self.network[n]["powered"] and not previous_powered:
+                        p = 2
+                    # This tile was previously powered but isn't anymore.
+                    elif not self.network[n]["powered"] and previous_powered:
+                        p = -2
+                    terrain_map.add_safe_area(n, p, 3)
+                    overlay_layer.draw_safe()
+            except KeyError:
+                pass
 
 
     def find_connected(self, cell_source, cell_destination):
