@@ -383,6 +383,7 @@ class BuildingLayer(ScrollableLayer):
             building (Building): id of the building to add.
         """
         if cell not in terrain_map.buildings.keys():
+            network_layer.plop_network(cell, "sink")
             terrain_map.add_building(cell, building)
             if building.building_id == 3:
                 terrain_map.add_safe_area(cell, 2, 3)
@@ -471,8 +472,9 @@ class Network:
     """
     def __init__(self):
         """
-        Dictionary will be of the form {Hexagon(q, r, s): {"type": network type}, ...}
-        Possible values for network type are "energy" and "control".
+        Dictionary will be of the form {Hexagon(q, r, s): {"type": "network type", "powered": True/False}, ...}
+        Possible values for network type are "energy", "control" and "sink". Energy means this network transports energy, control means it transports control signals and sink means it needs energy and control signals.
+        Powered indicated that this network node is recieving energy.
         """
         self.network = {Hexagon(0, 0, 0): {"type": "start", "powered": True}}
 
@@ -578,7 +580,7 @@ class NetworkLayer(ScrollableLayer):
                 self.network_batch.remove(f"{k.q}_{k.r}_{k.s}_6")
                 self.network_batch.add(sprite, z=-k.r - 10, name=f"{k.q}_{k.r}_{k.s}_6")
             for idx, n in enumerate(neighbours):
-                if n["type"] in (h["type"], "start"):
+                if n["type"] in (h["type"], "start", "energy", "sink"):
                     try:
                         sprite_name = f"energy network {self._neighbour_to_edge_sprite[idx]} {powered}"
                     except Exception:
