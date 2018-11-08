@@ -474,10 +474,21 @@ class Network:
         Dictionary will be of the form {Hexagon(q, r, s): {"type": network type}, ...}
         Possible values for network type are "energy" and "control".
         """
-        self.network = {Hexagon(0, 0, 0): {"type": "start"}}
+        self.network = {Hexagon(0, 0, 0): {"type": "start", "powered": True}}
+
+    def update_powered(self):
+        """
+        Update all nodes in the network as to whether they're powered or not.
+        """
+        powered = self.find_all_connected(Hexagon(0, 0, 0))
+        for n in self.network:
+            if n in powered:
+                self.network[n]["powered"] = True
+            else:
+                self.network[n]["powered"] = False
+
 
     def find_connected(self, cell_source, cell_destination):
-        print(cell_source, cell_destination)
         """
         Checks to see if the source cell is connected to a destination cell.
         Uses A*. Dijkstra’s may be better with multiple sources.
@@ -489,16 +500,12 @@ class Network:
         """
         q = []
         heappush(q, [cell_source, 0])
-        print("qs", q)
         visited = {}
         total_cost = {}
         visited[cell_source] = None
         total_cost[cell_source] = 0
 
         while len(q) != 0:
-            print("q", q)
-            print("v", visited)
-            print("tc", total_cost)
             current, _ = heappop(q)
             if current == cell_destination:
                 return visited
@@ -511,6 +518,28 @@ class Network:
                     heappush(q, [next_cell, p])
                     visited[next_cell] = current
         return None
+
+    def find_all_connected(self, start_cell):
+        """
+        Finds all all the cells connected to the current cell.
+        Args:
+            start_cell (Hexagon): cell we want to determine connectivity from.
+            visited (list): cells that we have visited already and don't need to be checked again.
+        Returns:
+            List of cells that are connected.
+        """
+        return self.find_all_connected_inner(start_cell, set())
+
+    def find_all_connected_inner(self, start_cell, visited):
+        if start_cell in visited:
+            return visited
+        visited.add(start_cell)
+        neighbours = [hex_math.hex_neighbor(start_cell, x) for x in range(6) if
+                      hex_math.hex_neighbor(start_cell, x) in self.network.keys()]
+        for n in neighbours:
+            if n not in visited:
+                visited.union(self.find_all_connected_inner(n, visited))
+        return visited
 
     def __len__(self):
         return len(self.network)
@@ -527,6 +556,7 @@ class NetworkLayer(ScrollableLayer):
         """
         Handles drawing of the network.
         """
+        network_map.update_powered()
         for k, h in network_map.network.items():
             if h["type"] == "start":
                 continue
@@ -545,7 +575,8 @@ class NetworkLayer(ScrollableLayer):
             try:
                 self.network_batch.add(sprite, z=-k.r - 10, name=f"{k.q}_{k.r}_{k.s}_6")
             except Exception:
-                pass
+                self.network_batch.remove(f"{k.q}_{k.r}_{k.s}_6")
+                self.network_batch.add(sprite, z=-k.r - 10, name=f"{k.q}_{k.r}_{k.s}_6")
             for idx, n in enumerate(neighbours):
                 if n["type"] in (h["type"], "start"):
                     try:
@@ -556,7 +587,8 @@ class NetworkLayer(ScrollableLayer):
                     try:
                         self.network_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}_{idx}")
                     except Exception:
-                        pass  # This sprite must already exist, so we skip it.
+                        self.network_batch.remove(f"{k.q}_{k.r}_{k.s}_{idx}")
+                        self.network_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}_{idx}")
         self.add(self.network_batch)
 
     def plop_network(self, cell, network_type="energy"):
