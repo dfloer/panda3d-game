@@ -371,13 +371,20 @@ class BuildingLayer(ScrollableLayer):
     def draw_buildings(self):
         self.children = []
         for k, building in terrain_map.buildings.items():
+            powered = network_map.network[k]["powered"]
             position = hex_math.hex_to_pixel(layout, k, False)
             anchor = sprite_width / 2, sprite_height / 2
-            sprite = Sprite(sprite_images[building.sprite_id], position=position, anchor=anchor)
+            p = " off"
+            if powered:
+                p = " on"
+            if building.building_id == 0:
+                p = ''
+            sprite = Sprite(sprite_images[f"{building.sprite_id}{p}"], position=position, anchor=anchor)
             try:
                 self.buildings_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
             except Exception:
-                pass  # This sprite must already exist, so we skip it.
+                self.buildings_batch.remove(f"{k.q}_{k.r}_{k.s}")
+                self.buildings_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
         self.add(self.buildings_batch)
 
     def plop_building(self, cell, building):
@@ -629,6 +636,7 @@ class NetworkLayer(ScrollableLayer):
                 # Going to either need to tell neighbours to check themselves again, or force a redraw and reparse of the whole network, which could be painful.
             network_map.network[cell] = {"type": network_type, "powered": powered}
             self.draw_network()
+            building_layer.draw_buildings()
         else:
             print("Network already exists, skipping.")
 
@@ -655,6 +663,7 @@ class NetworkLayer(ScrollableLayer):
                     except Exception:
                         pass  # This sprite must already exist, so we skip it.)
             self.draw_network()
+            building_layer.draw_buildings()
 
     def set_focus(self, *args, **kwargs):
         super().set_focus(*args, **kwargs)
