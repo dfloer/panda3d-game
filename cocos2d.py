@@ -12,6 +12,7 @@ from random import randint
 from collections import namedtuple
 from math import sqrt
 import os
+from heapq import heappush, heappop
 
 Hexagon = namedtuple("Hex", ["q", "r", "s"])
 Point = namedtuple("Point", ["x", "y"])
@@ -475,6 +476,42 @@ class Network:
         """
         self.network = {Hexagon(0, 0, 0): {"type": "start"}}
 
+    def find_connected(self, cell_source, cell_destination):
+        print(cell_source, cell_destination)
+        """
+        Checks to see if the source cell is connected to a destination cell.
+        Uses A*. Dijkstra’s may be better with multiple sources.
+        Args:
+            cell_source (Hexagon): hex cell that we are starting from.
+            cell_destination (Hexagon): hex cell that we want to find a path to.
+        Returns:
+            Either a list containing the hexes that need to be traversed for the path, or None if they aren't connected.
+        """
+        q = []
+        heappush(q, [cell_source, 0])
+        print("qs", q)
+        visited = {}
+        total_cost = {}
+        visited[cell_source] = None
+        total_cost[cell_source] = 0
+
+        while len(q) != 0:
+            print("q", q)
+            print("v", visited)
+            print("tc", total_cost)
+            current, _ = heappop(q)
+            if current == cell_destination:
+                return visited
+            neighbours = [hex_math.hex_neighbor(current, x) for x in range(6) if hex_math.hex_neighbor(current, x) in self.network.keys()]
+            for next_cell in neighbours:
+                new_cost = total_cost[current] + 1
+                if next_cell not in total_cost or new_cost < total_cost[next_cell]:
+                    total_cost[next_cell] = new_cost
+                    p = new_cost + hex_math.hex_distance(cell_destination, next_cell)
+                    heappush(q, [next_cell, p])
+                    visited[next_cell] = current
+        return None
+
     def __len__(self):
         return len(self.network)
 
@@ -501,7 +538,10 @@ class NetworkLayer(ScrollableLayer):
                     neighbours += [{"type": None}]
             position = hex_math.hex_to_pixel(layout, k, False)
             anchor = sprite_width / 2, sprite_height / 2
-            sprite = Sprite(sprite_images["energy network center on"], position=position, anchor=anchor)
+            powered = "off"
+            if h["powered"]:
+                powered = "on"
+            sprite = Sprite(sprite_images[f"energy network center {powered}"], position=position, anchor=anchor)
             try:
                 self.network_batch.add(sprite, z=-k.r - 10, name=f"{k.q}_{k.r}_{k.s}_6")
             except Exception:
@@ -509,7 +549,7 @@ class NetworkLayer(ScrollableLayer):
             for idx, n in enumerate(neighbours):
                 if n["type"] in (h["type"], "start"):
                     try:
-                        sprite_name = f"energy network {self._neighbour_to_edge_sprite[idx]} on"
+                        sprite_name = f"energy network {self._neighbour_to_edge_sprite[idx]} {powered}"
                     except Exception:
                         pass
                     sprite = Sprite(sprite_images[sprite_name], position=position, anchor=anchor)
@@ -528,7 +568,12 @@ class NetworkLayer(ScrollableLayer):
             network_type (str): id of the building to add.
         """
         if cell not in network_map.network.keys():
-            network_map.network[cell] = {"type": network_type}
+            n = network_map.find_connected(cell, Hexagon(0, 0, 0))
+            powered = False
+            if n is not None:
+                powered = True
+                # Going to either need to tell neighbours to check themselves again, or force a redraw and reparse of the whole network, which could be painful.
+            network_map.network[cell] = {"type": network_type, "powered": powered}
             self.draw_network()
         else:
             print("Network already exists, skipping.")
