@@ -117,6 +117,9 @@ class Terrain:
             chunk = TerrainChunk(center, self.chunk_size)
             self.chunk_list[center] = [k for k in chunk.chunk_cells.keys()]
             for k, v in chunk.chunk_cells.items():
+                # Todo: this is a hack, figure out why overlapping chunks are ever generated.
+                if k in self.hexagon_map.keys():
+                    continue
                 self.hexagon_map[k] = v
                 if k == Hexagon(0, 0, 0):
                     self.hexagon_map[center].terrain_type = 7
