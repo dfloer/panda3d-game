@@ -14,6 +14,7 @@ from collections import namedtuple
 from math import sqrt
 import os
 from heapq import heappush, heappop
+import helpers
 
 Hexagon = namedtuple("Hex", ["q", "r", "s"])
 Point = namedtuple("Point", ["x", "y"])
@@ -62,7 +63,6 @@ class Terrain:
             self.generate_chunk(c)
         if len(self.chunk_list) > before_size:  # Only redraw map if we've added hexes.
             terrain_layer.batch_map()
-
 
     def find_visible_chunks(self):
         """
@@ -295,7 +295,10 @@ class InputLayer(ScrollableLayer):
         p = Point(x + scroller.offset[0], y + scroller.offset[1])
         h = hex_math.pixel_to_hex(layout, p)
         if button == 4:  # Right click.
-            info = f"({h.q}, {h.r}, {h.s}). {terrain_map.hexagon_map[h]}"
+            c = ''
+            if h in terrain_map.chunk_list:
+                c = " chunk"
+            info = f"({h.q}, {h.r}, {h.s}){c}. {terrain_map.hexagon_map[h]}"
             print(info)
             text_layer.update_label(info)
         # This will get split out into it
