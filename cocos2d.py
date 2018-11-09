@@ -80,7 +80,7 @@ class Terrain:
         q_offset = self.chunk_size // 2
         left = Hexagon(center.q - self.chunk_size, center.r, -(center.q - self.chunk_size) - center.r)
         right = Hexagon(center.q + self.chunk_size, center.r, -(center.q + self.chunk_size) - center.r)
-        up = Hexagon(center.q - q_offset, center.r + self.chunk_size, -(center.q +-q_offset) - (center.r + self.chunk_size))
+        up = Hexagon(center.q - q_offset, center.r + self.chunk_size, -(center.q - q_offset) - (center.r + self.chunk_size))
         down = Hexagon(center.q + q_offset + 1, center.r - self.chunk_size, -(center.q + q_offset + 1) - (center.r - self.chunk_size))
         # And the four diagonals, based on the previous ones.
         up_left = Hexagon(up.q - self.chunk_size, up.r, -(up.q - self.chunk_size) - up.r)
