@@ -4,6 +4,7 @@ from cocos.scene import Scene
 from cocos.batch import BatchNode
 from cocos.sprite import Sprite
 from cocos.menu import Menu
+from cocos.text import Label
 from pyglet.window import key
 from pyglet import image
 
@@ -294,7 +295,9 @@ class InputLayer(ScrollableLayer):
         p = Point(x + scroller.offset[0], y + scroller.offset[1])
         h = hex_math.pixel_to_hex(layout, p)
         if button == 4:  # Right click.
-            print(f"({h.q}, {h.r}, {h.s}). {terrain_map.hexagon_map[h]}")
+            info = f"({h.q}, {h.r}, {h.s}). {terrain_map.hexagon_map[h]}"
+            print(info)
+            text_layer.update_label(info)
         # This will get split out into it
         else:
             b = None
@@ -715,6 +718,20 @@ class MenuLayer(Menu):
         super().__init__()
 
 
+class TextOverlay(Layer):
+    def __init__(self):
+        super().__init__()
+        self.text = Label(text="", font_size=24, font_name="Arial", anchor_x="left", anchor_y="center", x=20, y=20, color=(255, 255, 255, 255))
+        self.update_label("Info")
+        self.add(self.text)
+
+    def update_label(self, label_text=''):
+        self.text.element.text = label_text
+
+    def set_view(self, *args, **kwargs):
+        super().set_view(*args, **kwargs)
+
+
 def load_images(path):
     """
     Loads the sprites from the given path.
@@ -746,6 +763,7 @@ if __name__ == "__main__":
     overlay_layer = OverlayLayer()
     network_map = Network()
     network_layer = NetworkLayer()
+    text_layer = TextOverlay()
 
     scroller.add(terrain_layer, z=0)
     scroller.add(network_layer, z=1)
@@ -754,5 +772,5 @@ if __name__ == "__main__":
     scroller.add(input_layer, z=5)
     building_layer.draw_buildings()
     director.window.push_handlers(keyboard)
-    director.run(Scene(scroller))
+    director.run(Scene(scroller, text_layer))
 
