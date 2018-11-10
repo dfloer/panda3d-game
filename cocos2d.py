@@ -220,16 +220,17 @@ class TerrainCell:
         self.sprite_id = sprite_id
         self.building = building
         self.safe = 0
+        self.visible = 0
 
     def __str__(self):
-        return f"Terrain: {self.terrain_type}, id: {self.sprite_id}, building: {self.building}, safe: {self.safe}"
+        return f"Terrain: {self.terrain_type}, id: {self.sprite_id}, building: {self.building}, safe: {self.safe}, visible: {self.visible}"
 
 
 class Building:
     """
     A class to store the different buildings in.
     """
-    _sprite_to_building = {0: "core claimed", 1: "RB", 2: "HR", 3: "protection tower", 4: "network energy test"}
+    _sprite_to_building = {0: "core claimed", 1: "RB", 2: "HR", 3: "protection tower", 4: "sensor tower"}
 
     def __init__(self, building_id):
         self.building_id = building_id
@@ -330,6 +331,8 @@ class InputLayer(ScrollableLayer):
                 b = Building(3)
             elif self.key is ord('e'):
                 network_layer.plop_network(h, "energy")
+            elif self.key is ord('s'):
+                b = Building(4)
             if b is not None:
                 building_layer.plop_building(h, b)
 
@@ -426,6 +429,9 @@ class BuildingLayer(ScrollableLayer):
             if building.building_id == 3 and network_map.network[cell]["powered"]:
                 terrain_map.add_safe_area(cell, 2, 3)
                 overlay_layer.draw_safe()
+            elif building.building_id == 4 and network_map.network[cell]["powered"]:
+                fog_layer.add_visible_area(cell, 2, 5)
+                fog_layer.draw_fog()
             self.draw_buildings()
         else:
             print("Building already exists, skipping.")
@@ -449,6 +455,56 @@ class BuildingLayer(ScrollableLayer):
             if building_id == 3 and network_map.network[cell]["powered"]:
                 terrain_map.add_safe_area(cell, -2, 3)
                 overlay_layer.draw_safe()
+            elif building_id == 4 and network_map.network[cell]["powered"]:
+                fog_layer.add_visible_area(cell, -2, 5)
+                fog_layer.draw_fog()
+
+
+class FogLayer(ScrollableLayer):
+    """
+    Class to hold the fog of war.
+    """
+    def __init__(self):
+        super().__init__()
+        self.fog_batch = BatchNode()
+        self.fog_batch.position = layout.origin.x, layout.origin.y
+
+    def add_visible_area(self, center, visible_type=0, radius=7):
+        """
+        Adds a visible area to terrain hexes. Can also be used to remove visibility, by setting safe_type=0.
+        Args:
+            center (Hexagon): center of the area to be made safe.
+            visible_type (int): 0 for unsafe, 1 for city-core visibility, 2 for other visibility, -2 to remove other visibility.
+            radius (int): radius of the visible area.
+        """
+        visible_hexes = hex_math.get_hex_chunk(center, radius)
+        for h in visible_hexes:
+            if terrain_map.hexagon_map[h].visible == 1:
+                continue
+            terrain_map.hexagon_map[h].visible += visible_type
+
+    def draw_fog(self):
+        print("draw fog")
+        viewport_hexes = scroller.visible_hexes
+        for k in viewport_hexes:
+            h = terrain_map.hexagon_map[k]
+            if h.visible == 0:
+                pass
+                position = hex_math.hex_to_pixel(layout, k, False)
+                anchor = sprite_width / 2, sprite_height / 2
+                sprite_id = "fog"
+                sprite = Sprite(sprite_images[sprite_id], position=position, anchor=anchor)
+                try:
+                    self.fog_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
+                except Exception:
+                    pass
+            else:
+                try:
+                    self.fog_batch.remove(f"{k.q}_{k.r}_{k.s}")
+                except Exception:
+                    pass
+            self.add(self.fog_batch)
+        print("draw fog done.")
 
 
 class OverlayLayer(ScrollableLayer):
@@ -545,6 +601,19 @@ class Network:
                         p = -2
                     terrain_map.add_safe_area(n, p, 3)
                     overlay_layer.draw_safe()
+            except KeyError:
+                pass
+            try:
+                if terrain_map.buildings[n].building_id == 4:
+                    p = 0
+                    # This tile is making the transition from unpowered to powered
+                    if self.network[n]["powered"] and not previous_powered:
+                        p = 2
+                    # This tile was previously powered but isn't anymore.
+                    elif not self.network[n]["powered"] and previous_powered:
+                        p = -2
+                    fog_layer.add_visible_area(n, p, 5)
+                    fog_layer.draw_fog()
             except KeyError:
                 pass
 
@@ -744,6 +813,7 @@ class InputScrolling(ScrollingManager):
             building_layer.draw_buildings()
             overlay_layer.draw_safe()
             network_layer.draw_network()
+            fog_layer.draw_fog()
             # Generate more terrain chunks.
             terrain_map.fill_viewport_chunks()
 
@@ -810,11 +880,15 @@ if __name__ == "__main__":
     network_map = Network()
     network_layer = NetworkLayer()
     text_layer = TextOverlay()
+    fog_layer = FogLayer()
+    fog_layer.add_visible_area(Hexagon(0, 0, 0), 1, 9)
+    fog_layer.draw_fog()
 
     scroller.add(terrain_layer, z=0)
     scroller.add(network_layer, z=1)
     scroller.add(building_layer, z=2)
-    scroller.add(overlay_layer, z=3)
+    scroller.add(fog_layer, z=3)
+    scroller.add(overlay_layer, z=4)
     scroller.add(input_layer, z=5)
     building_layer.draw_buildings()
     director.window.push_handlers(keyboard)
