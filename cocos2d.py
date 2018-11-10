@@ -465,7 +465,7 @@ class OverlayLayer(ScrollableLayer):
             if k not in scroller.visible_hexes:
                 for idx in range(6):
                     try:
-                        self.buildings_batch.remove(f"{k.q}_{k.r}_{k.s}_{idx}")
+                        self.overlay_batch.remove(f"{k.q}_{k.r}_{k.s}_{idx}")
                     except Exception:
                         pass
                 continue
@@ -622,8 +622,7 @@ class NetworkLayer(ScrollableLayer):
             if k not in scroller.visible_hexes:
                 for idx in range(7):
                     try:
-                        self.buildings_batch.remove(f"{k.q}_{k.r}_{k.s}_{idx}")
-                        print(f"remove{k}")
+                        self.network_batch.remove(f"{k.q}_{k.r}_{k.s}_{idx}")
                     except Exception:
                         pass
                 continue
