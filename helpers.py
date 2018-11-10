@@ -1,7 +1,8 @@
 import hex_math
 from hex_math import Point
 
-def get_current_viewport(sprite_width, scroller, safe=True):
+
+def get_current_viewport(layout, sprite_width, scroller, safe=True):
     """
     Get the current viewport coordinates. I feel like Cocos2d should handle this, but I can't seem to find it.
     Args:
@@ -18,6 +19,14 @@ def get_current_viewport(sprite_width, scroller, safe=True):
     y = scroller.fy
     window_width = scroller.view_w
     window_height = scroller.view_h
+
+    # Workaround for when this function gets called before the window has been properly instantiated.
+    if (x, y) == (0, 0):
+        x = layout.origin.x
+        y = layout.origin.y
+    if (window_width, window_height) == (1, 1):
+        window_width = layout.origin.x * 2
+        window_height = layout.origin.y * 2
 
     tl = x - window_width // 2, y + window_height // 2
     bl = x - window_width // 2, y - window_height // 2
@@ -42,7 +51,7 @@ def get_current_viewport_hexes(layout, sprite_width, scroller, safe=True):
     Returns:
         A dictionary of the hegaxons corresponding to the corners of the viewport.
     """
-    coordinates = get_current_viewport(sprite_width, scroller, safe)
+    coordinates = get_current_viewport(layout, sprite_width, scroller, safe)
     return {k: hex_math.pixel_to_hex(layout, Point(*v)) for k, v in coordinates.items()}
 
 
