@@ -62,7 +62,7 @@ class Terrain:
         for c in chunks:
             self.generate_chunk(c)
         if len(self.chunk_list) > before_size:  # Only redraw map if we've added hexes.
-            terrain_layer.batch_map()
+            terrain_layer.draw_terrain()
 
     def find_visible_chunks(self):
         """
@@ -249,17 +249,26 @@ class MapLayer(ScrollableLayer):
         self.map_sprites_batch = BatchNode()
         self.map_sprites_batch.position = layout.origin.x, layout.origin.y
 
-    def batch_map(self):
+    def draw_terrain(self):
         """
         Generate the sprites to put into the render batch.
         """
         self.children = []  # Hack. But I don't need many copies of the same hexes.
         for hexagon, hex_properties in terrain_map.hexagon_map.items():
+            if hexagon not in scroller.visible_hexes:
+                try:
+                    self.map_sprites_batch.remove(f"{hexagon.q}_{hexagon.r}_{hexagon.s}")
+                except Exception:
+                    pass
+                continue
             position = hex_math.hex_to_pixel(layout, hexagon, False)
             anchor = sprite_width // 2, sprite_height // 2
             sprite_id = hex_properties.sprite_id
             sprite = Sprite(sprite_images[sprite_id], position=position, anchor=anchor)
-            self.map_sprites_batch.add(sprite, z=-hexagon.r)
+            try:
+                self.map_sprites_batch.add(sprite, z=-hexagon.r, name=f"{hexagon.q}_{hexagon.r}_{hexagon.s}")
+            except Exception:
+                pass
         self.add(self.map_sprites_batch)
 
     def set_view(self, x, y, w, h, viewport_ox=0, viewport_oy=0):
@@ -381,6 +390,12 @@ class BuildingLayer(ScrollableLayer):
     def draw_buildings(self):
         self.children = []
         for k, building in terrain_map.buildings.items():
+            if k not in scroller.visible_hexes:
+                try:
+                    self.buildings_batch.remove(f"{k.q}_{k.r}_{k.s}")
+                except Exception:
+                    pass
+                continue
             powered = network_map.network[k]["powered"]
             position = hex_math.hex_to_pixel(layout, k, False)
             anchor = sprite_width / 2, sprite_height / 2
@@ -447,6 +462,13 @@ class OverlayLayer(ScrollableLayer):
 
     def draw_safe(self):
         for k, h in terrain_map.hexagon_map.items():
+            if k not in scroller.visible_hexes:
+                for idx in range(6):
+                    try:
+                        self.buildings_batch.remove(f"{k.q}_{k.r}_{k.s}_{idx}")
+                    except Exception:
+                        pass
+                continue
             if h.safe != 0:
                 neighbours = [terrain_map.hexagon_map[hex_math.hex_neighbor(k, x)].safe for x in range(6)]
                 position = hex_math.hex_to_pixel(layout, k, False)
@@ -597,6 +619,14 @@ class NetworkLayer(ScrollableLayer):
         """
         network_map.update_powered()
         for k, h in network_map.network.items():
+            if k not in scroller.visible_hexes:
+                for idx in range(7):
+                    try:
+                        self.buildings_batch.remove(f"{k.q}_{k.r}_{k.s}_{idx}")
+                        print(f"remove{k}")
+                    except Exception:
+                        pass
+                continue
             if h["type"] == "start":
                 continue
             neighbours = []
@@ -687,6 +717,7 @@ class InputScrolling(ScrollingManager):
         self.center = list(center)
         self.scroll_inc = 32
         self.offset = [0, 0]
+        self.visible_hexes = helpers.find_visible_hexes(sprite_width, layout, self, safe=True)
 
     def on_key_press(self, key, modifiers):
         scroll = False
@@ -708,14 +739,23 @@ class InputScrolling(ScrollingManager):
         if scroll:
             new_focus = [sum(x) for x in zip(self.center, self.offset)]
             self.scroll(new_focus)
+            self.update_visible()
+            # Update the display layers when we scroll.
+            terrain_layer.draw_terrain()
+            building_layer.draw_buildings()
+            overlay_layer.draw_safe()
+            network_layer.draw_network()
+            # Generate more terrain chunks.
             terrain_map.fill_viewport_chunks()
 
     def set_focus(self, *args, **kwargs):
         super().set_focus(*args, **kwargs)
 
     def scroll(self, new_center):
-
         self.set_focus(*new_center)
+
+    def update_visible(self):
+        self.visible_hexes = helpers.find_visible_hexes(sprite_width, layout, self, safe=True)
 
 
 class MenuLayer(Menu):
@@ -763,7 +803,7 @@ if __name__ == "__main__":
     terrain_map.generate_chunk(Hexagon(0, 0, 0))
     input_layer = InputLayer()
     terrain_layer = MapLayer()
-    terrain_layer.batch_map()
+    terrain_layer.draw_terrain()
     terrain_layer.set_focus(*layout.origin)
     terrain_map.fill_viewport_chunks()
     terrain_map.add_safe_area(Hexagon(0, 0, 0), 1, 7)
