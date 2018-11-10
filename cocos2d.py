@@ -503,7 +503,7 @@ class FogLayer(ScrollableLayer):
                     self.fog_batch.remove(f"{k.q}_{k.r}_{k.s}")
                 except Exception:
                     pass
-            self.add(self.fog_batch)
+            # self.add(self.fog_batch)  # Todo: figure out why fog drawing is so slow.
         print("draw fog done.")
 
 
