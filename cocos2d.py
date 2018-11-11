@@ -484,27 +484,28 @@ class FogLayer(ScrollableLayer):
             terrain_map.hexagon_map[h].visible += visible_type
 
     def draw_fog(self):
-        print("draw fog")
-        viewport_hexes = scroller.visible_hexes
-        for k in viewport_hexes:
-            h = terrain_map.hexagon_map[k]
-            if h.visible == 0:
-                pass
-                position = hex_math.hex_to_pixel(layout, k, False)
-                anchor = sprite_width / 2, sprite_height / 2
-                sprite_id = "fog"
-                sprite = Sprite(sprite_images[sprite_id], position=position, anchor=anchor)
-                try:
-                    self.fog_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
-                except Exception:
-                    pass
-            else:
-                try:
-                    self.fog_batch.remove(f"{k.q}_{k.r}_{k.s}")
-                except Exception:
-                    pass
-            # self.add(self.fog_batch)  # Todo: figure out why fog drawing is so slow.
-        print("draw fog done.")
+        pass
+        # print("draw fog")
+        # viewport_hexes = scroller.visible_hexes
+        # for k in viewport_hexes:
+        #     h = terrain_map.hexagon_map[k]
+        #     if h.visible == 0:
+        #         pass
+        #         position = hex_math.hex_to_pixel(layout, k, False)
+        #         anchor = sprite_width / 2, sprite_height / 2
+        #         sprite_id = "fog"
+        #         sprite = Sprite(sprite_images[sprite_id], position=position, anchor=anchor)
+        #         try:
+        #             self.fog_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
+        #         except Exception:
+        #             pass
+        #     else:
+        #         try:
+        #             self.fog_batch.remove(f"{k.q}_{k.r}_{k.s}")
+        #         except Exception:
+        #             pass
+        #     self.add(self.fog_batch)  # Todo: figure out why fog drawing is so slow.
+        # print("draw fog done.")
 
 
 class OverlayLayer(ScrollableLayer):
