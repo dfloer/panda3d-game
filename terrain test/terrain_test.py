@@ -5,6 +5,7 @@ from collections import namedtuple
 from math import sqrt
 import os
 import sys
+import settings
 sys.path.append('..')
 import hex_math
 
@@ -91,8 +92,9 @@ class Terrain:
         #     self.generate_chunk(c)
         chunks = self.find_visible_chunks()
         before_size = len(self.chunk_list)
-        for c in chunks:
-            self.generate_chunk(c)
+        for chunk in chunks:
+            chunk_hash = hash(tuple(chunk) + (self.random_seed,))
+            self.generate_chunk(chunk, chunk_hash)
         if len(self.chunk_list) > before_size:  # Only redraw map if we've added hexes.
             terrain_layer.draw_terrain(terrain_map)
 
@@ -193,15 +195,19 @@ class Terrain:
                 return x
         return cell
 
-    def generate_chunk(self, center):
+    def generate_chunk(self, center, chunk_hash):
         """
         Generates a chunk. See note in init function about how hacky this is.
         Args:
             center (Hexagon): hexagon representing the center of the chunk.
+            chunk_hash (int): hash value used to determine things about this chunk.
         """
         if center not in self.chunk_list.keys():
             chunk = TerrainChunk(center, self.chunk_size)
             self.chunk_list[center] = [k for k in chunk.chunk_cells.keys()]
+            new_city_core = False
+            if chunk_hash % settings.core_offset == 0:
+                new_city_core = self.add_core(center)
             for k, v in chunk.chunk_cells.items():
                 # Todo: this is a hack, figure out why overlapping chunks are ever generated.
                 if k in self.hexagon_map.keys():
@@ -211,6 +217,28 @@ class Terrain:
                 if k == Hexagon(0, 0, 0):
                     self.hexagon_map[center].terrain_type = 14
                     self.hexagon_map[center].sprite_id = '14'
+                    terrain_map.city_cores += [k]
+                elif k == center and new_city_core:
+                    print(f"Enemy core added at: {center}.")
+                    self.hexagon_map[center].terrain_type = 15
+                    self.hexagon_map[center].sprite_id = '15'
+                    terrain_map.city_cores += [k]
+
+
+    def add_core(self, center):
+        """
+        Attempts to add a core to this chunk. Minimum distance from another core determined in settings file.
+        Args:
+            center (Hexagon): hexagon to attempt to add the new city core at.
+        Returns:
+            True if this is a good chunk to add a core in, False if it isn't.
+        """
+        minimum = settings.minimum_core_distance
+        for c in terrain_map.city_cores:
+            # If we're less than the minimum to any core, we're done.
+            if hex_math.hex_distance(c, center) < minimum:
+                return False
+        return True
 
     def __len__(self):
         return len(self.chunk_list) * self.chunk_size * self.chunk_size
@@ -317,7 +345,7 @@ def load_spritesheet(path):
 if __name__ == "__main__":
     sprite_images = load_spritesheet('')
     terrain_map = Terrain(7)
-    terrain_map.generate_chunk(Hexagon(0, 0, 0))
+    terrain_map.generate_chunk(Hexagon(0, 0, 0), 0)
 
     terrain_layer = TerrainImage()
     terrain_map.fill_viewport_chunks()
