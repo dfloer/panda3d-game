@@ -102,15 +102,6 @@ class Terrain:
         Returns:
             A list of TerrainChunk objects that are visible in the current viewport.
         """
-        # screen_center = hex_math.pixel_to_hex(layout, Point(window_width // 2, window_height // 2))
-        # center = self.find_chunk_parent(screen_center)
-        # all_visible_hexes = find_visible_hexes()
-        # chunks = self.find_chunks(center)
-        # for c in chunks:
-        #     self.chunk_list[c] = None
-        # return chunks
-        # Algorithm works like this:
-        # First,
         x = window_width // 2
         y = window_height // 2
         screen_center = hex_math.pixel_to_hex(layout, Point(x, y))
@@ -118,56 +109,73 @@ class Terrain:
         return self.find_chunks(center)
 
     def chunk_get_next(self, center, direction="up"):
+        """
+        Given a current chunk's anchor hexagon, find the next chunk's anchor hexagon.
+        Currently doesn't support diagonals.
+        Args:
+            center (Hexagon): the anchor hexagon for this chunk.
+            direction (str): One up up, down, left or right for the direction to get the next chunk from.
+        Returns:
+            A hexagon with the desired chunk's anchor.
+        """
         q_offset = self.chunk_size // 2
         directions = {
-            "up": (center.q - q_offset - 1,
-                   center.r + self.chunk_size + 1,
-                   -(center.q - q_offset - 1) - (center.r + self.chunk_size)),
-            "down": (center.q + q_offset + 1,
-                     center.r - self.chunk_size - 1,
-                     -(center.q + q_offset + 1) - (center.r - self.chunk_size)),
+            "up": (center.q + q_offset + 1,
+                center.r - self.chunk_size - 1,
+                -(center.q + q_offset + 1) - (center.r - self.chunk_size - 1)),
+            "down": (center.q - q_offset - 1,
+                center.r + self.chunk_size + 1,
+                -(center.q - q_offset - 1) - (center.r + self.chunk_size + 1)),
             "left": (center.q - self.chunk_size,
-                     center.r,
-                     -(center.q - self.chunk_size) - center.r),
+                center.r,
+                -(center.q - self.chunk_size) - center.r),
             "right": (center.q + self.chunk_size,
-                      center.r,
-                      -(center.q + self.chunk_size) - center.r),
+                center.r,
+                -(center.q + self.chunk_size) - center.r),
         }
         return Hexagon(*directions[direction])
 
     def find_chunks(self, center):
+        """
+        Finds all of the chunks in the viewport.
+        Args:
+            center (Hexagon): hexagon representing the center of the viewport.
+        Returns:
+            A set of all the chunk anchors visible in the viewport (and then some that aren't to make sure we've filled past the edge of the viewport).
+        """
+        # First generate all of the chunks in a vertical strip centered on the center chunk to the top and bottom of viewport, plus a little extra for safety.
         all_visible_hexes = find_visible_hexes()
-        print(all_visible_hexes)
         ups = [center]
         while True:
             ups += [self.chunk_get_next(ups[-1], "up")]
-            print(ups[-1])
             if ups[-1] not in all_visible_hexes:
                 break
         downs = [center]
         while True:
-            downs += [self.chunk_get_next(ups[-1], "down")]
-            print(downs[-1])
+            downs += [self.chunk_get_next(downs[-1], "down")]
             if downs[-1] not in all_visible_hexes:
                 break
-
-        # q_offset = self.chunk_size // 2
-        # left = Hexagon(center.q - self.chunk_size, center.r, -(center.q - self.chunk_size) - center.r)
-        # right = Hexagon(center.q + self.chunk_size, center.r, -(center.q + self.chunk_size) - center.r)
-        # up = Hexagon(center.q - q_offset - 1, center.r + self.chunk_size + 1, -(center.q - q_offset - 1) - (center.r + self.chunk_size))
-        # down = Hexagon(center.q + q_offset + 1, center.r - self.chunk_size -1, -(center.q + q_offset + 1) - (center.r - self.chunk_size))
-        # # And the four diagonals, based on the previous ones.
-        # up_left = Hexagon(up.q - self.chunk_size, up.r, -(up.q - self.chunk_size) - up.r)
-        # up_right = Hexagon(up.q + self.chunk_size, up.r, -(up.q + self.chunk_size) - up.r)
-        # down_left = Hexagon(down.q - self.chunk_size, down.r, -(down.q - self.chunk_size) - down.r)
-        # down_right = Hexagon(down.q + self.chunk_size, down.r, -(down.q + self.chunk_size) - down.r)
-        # chunks = up, down, left, right, up_left, up_right, down_left, down_right
+        vertical_strip = ups + downs
+        horizontal_strips = []
+        # With the vertical strip down, generate a horizontal strip for each chunk in it, to cover the viewpor.
+        for c in vertical_strip:
+            lefts = [c]
+            rights = [c]
+            while True:
+                lefts += [self.chunk_get_next(lefts[-1], "left")]
+                if lefts[-1] not in all_visible_hexes:
+                    break
+            while True:
+                rights += [self.chunk_get_next(rights[-1], "right")]
+                if rights[-1] not in all_visible_hexes:
+                    break
+            horizontal_strips += lefts + rights
         chunks = set()
-        for x in [ups + downs]:
-            chunks.add(x[0])
-        print(chunks)
+        for x in ups + downs:
+            chunks.add(x)
+        for x in horizontal_strips:
+            chunks.add(x)
         return chunks
-
 
     def find_chunk_parent(self, cell):
         """
@@ -312,12 +320,7 @@ if __name__ == "__main__":
     terrain_map.generate_chunk(Hexagon(0, 0, 0))
 
     terrain_layer = TerrainImage()
-    # terrain_map.fill_viewport_chunks()
-    for x in find_visible_hexes():
-        t = randint(1, 12)
-        if x == Hexagon(0, 0, 0):
-            t = '14'
-        terrain_map.hexagon_map[x] = TerrainCell(t, str(t))
+    terrain_map.fill_viewport_chunks()
     terrain_layer.draw_terrain(terrain_map)
     terrain_layer.save_terrain()
 
