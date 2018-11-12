@@ -5,6 +5,7 @@ from collections import namedtuple
 from math import sqrt
 import os
 import sys
+from opensimplex import OpenSimplex
 import settings
 sys.path.append('..')
 import hex_math
@@ -75,7 +76,7 @@ class Terrain:
         self.city_cores = []
         self.random_seed = random_seed
         self.chunk_size = chunk_size
-
+        self.noise = OpenSimplex(seed=self.random_seed)
         # This seems is a bit of a hack, but it seems to work. Hopefully I won't regret it later.
         # Chunk list has a key of the center of a chunk, and the values are the hexes inside that chunk.
         # The actual terrain hexes are stored in hexagon_map, with their key being the hexagon from the chunk_list.
@@ -188,7 +189,7 @@ class Terrain:
             Hexagon pointing to the center of the chunk.
         """
         # Generate a chunk with myself in the middle.
-        test_chunk = TerrainChunk(cell, self.chunk_size)
+        test_chunk = TerrainChunk(cell, self.chunk_size, self.noise)
         to_check = test_chunk.chunk_cells.keys()
         for x in to_check:
             if x in self.chunk_list.keys():
@@ -203,7 +204,7 @@ class Terrain:
             chunk_hash (int): hash value used to determine things about this chunk.
         """
         if center not in self.chunk_list.keys():
-            chunk = TerrainChunk(center, self.chunk_size)
+            chunk = TerrainChunk(center, self.chunk_size, self.noise)
             self.chunk_list[center] = [k for k in chunk.chunk_cells.keys()]
             new_city_core = False
             if chunk_hash % settings.core_offset == 0:
@@ -248,19 +249,26 @@ class TerrainChunk:
     """
     Stores metadata and data related to a terrain chunk.
     """
-    def __init__(self, center, chunk_size):
+    def __init__(self, center, chunk_size, noise):
         self.center = center
         self.chunk_size = chunk_size
-        self.chunk_cells = self.generate(self.center)
+        self.chunk_cells = self.generate(self.center, noise)
 
-    def generate(self, center):
+    def generate(self, center, noise):
         """
         Generates a chunk, sized as given. Current algorithm is to generate a "rectangle". Why a rectangle? Because that's the shape of a window, and it allows chunks to be accessed as x/y coordinates of their centers.
         Args:
             center (Hexagon): the q, r, and s coordinates for the center of the chunk.
+            noise (OpenSimplex): opensimplex noise object.
         Returns:
             A dictionary of terrain hexes, containing chunk_size * chunk_size items.
         """
+        # These appear magic. Maybe I'm missing something in OpenSimplex...
+        n_max = 0.8644
+        bins = 12
+        bin_size = (n_max * 2) / bins
+        n_bins = [-n_max + x * bin_size for x in range(bins + 1)]
+
         x_dim, y_dim = (self.chunk_size, self.chunk_size)
         chunk_cells = {}
         # Why all this futzing around with dimensions // 2? Because I wanted the start of the chunk to be centered in the middle of the chunk.
@@ -274,7 +282,13 @@ class TerrainChunk:
                 qq = center.q + q
                 rr = center.r + r
                 h = Hexagon(qq, rr, -qq - rr)
-                terrain_type = str(randint(0, 12))
+                #terrain_type = str(randint(0, 12))
+                # Should I be normalizing the hex values to an xy grid so each hex is right next to each other, not based off of the hexagon's center coordinates?
+                xy = hex_math.hex_to_pixel(layout, h)
+                noise_val = noise.noise2d(xy.x, xy.y)
+                # Find the closest value in the list to our noise value. We want to normalize to a sprite.
+                t = min(range(len(n_bins)), key=lambda i: abs(n_bins[i] - noise_val))
+                terrain_type = str(t)
                 sprite_id = terrain_type
                 chunk_cells[h] = TerrainCell(terrain_type, sprite_id)
         return chunk_cells
@@ -346,6 +360,7 @@ if __name__ == "__main__":
     sprite_images = load_spritesheet('')
     terrain_map = Terrain(7)
     terrain_map.generate_chunk(Hexagon(0, 0, 0), 0)
+    terrain_map.city_cores += [Hexagon(0, 0, 0)]
 
     terrain_layer = TerrainImage()
     terrain_map.fill_viewport_chunks()
