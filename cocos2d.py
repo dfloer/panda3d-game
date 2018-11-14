@@ -295,6 +295,7 @@ class InputLayer(ScrollableLayer):
         self.key = None
         self.modifier = None
         self.selection = set()
+        self.unit_move = False
 
     def on_mouse_press(self, x, y, button, dy):
         """
@@ -339,11 +340,23 @@ class InputLayer(ScrollableLayer):
                     print("Can't network in fog-of-war.")
             elif self.key is ord('s'):
                 b = Building(4)
+            elif self.key is ord('t'):
+                unit_layer.add_unit(h, 1)
+
             if b is not None and terrain_map.hexagon_map[h].visible != 0:
                 building_layer.plop_building(h, b)
             elif b is not None and terrain_map.hexagon_map[h].visible == 0:
                 print("Can't build in fog-of-war.")
 
+    def on_mouse_release(self, x, y, button, modifiers):
+        # This may not be the best way to track movement, but self.unit_move has the start cell.
+        # So we move it to the new cell and clear movement.
+        p = Point(x + scroller.offset[0], y + scroller.offset[1])
+        h = hex_math.pixel_to_hex(layout, p)
+        if self.unit_move:
+            print(f"Moving unit from {self.unit_move} to {h}")
+            unit_layer.move_unit(self.unit_move, h)
+            self.unit_move = False
 
     def on_mouse_motion(self, x, y, dx, dy):
         p = Point(x + scroller.offset[0], y + scroller.offset[1])
@@ -376,16 +389,18 @@ class InputLayer(ScrollableLayer):
     def default_click(self, h):
         position = hex_math.hex_to_pixel(layout, h, False)
         # Todo: Figure out the issue causing hexes to sometime not be properly selected, probably rouning.
-
-        anchor = sprite_width / 2, sprite_height / 2
-        sprite = Sprite(sprite_images["select red border"], position=position, anchor=anchor)
-        try:
-            self.selected_batch.add(sprite, z=-h.r, name=f"{h.q}_{h.r}_{h.s}_red")
-            self.selection.add(h)
-        except Exception:
-            self.selected_batch.remove(f"{h.q}_{h.r}_{h.s}_red")
-            self.selection.remove(h)
-        self.add(self.selected_batch)
+        if h in unit_layer.units.keys():
+            self.unit_move = h
+        else:
+            anchor = sprite_width / 2, sprite_height / 2
+            sprite = Sprite(sprite_images["select red border"], position=position, anchor=anchor)
+            try:
+                self.selected_batch.add(sprite, z=-h.r, name=f"{h.q}_{h.r}_{h.s}_red")
+                self.selection.add(h)
+            except Exception:
+                self.selected_batch.remove(f"{h.q}_{h.r}_{h.s}_red")
+                self.selection.remove(h)
+            self.add(self.selected_batch)
 
 
 class BuildingLayer(ScrollableLayer):
@@ -494,7 +509,7 @@ class FogLayer(ScrollableLayer):
             terrain_map.hexagon_map[h].visible += visible_type
 
     def draw_fog(self):
-
+        # Todo: Handle fog drawing over buildings/networks that have been culled due to scrolling.
         self.children = []
         viewport_hexes = scroller.visible_hexes
         for k in viewport_hexes:
@@ -841,6 +856,122 @@ class InputScrolling(ScrollingManager):
         self.visible_hexes = helpers.find_visible_hexes(sprite_width, layout, self, safe=True)
 
 
+class UnitLayer(ScrollableLayer):
+    """
+    Class to handle units.
+    """
+    is_event_handler = True
+
+    def __init__(self):
+        super().__init__()
+        self.units = {}
+        self.units_batch = BatchNode()
+        self.units_batch.position = layout.origin.x, layout.origin.y
+
+    def set_focus(self, *args, **kwargs):
+        super().set_focus(*args, **kwargs)
+
+    def add_unit(self, unit_position, unit_id, unit=None):
+        """
+        Instantiates a unit at the given position. Units can be on top of networks, but not on top ob buildings.
+        Args:
+            unit_id (int): if of the unit.
+            unit_position (Hexagon): position to create the unit at.
+            unit (Unit): unit if we're using this function with an existing unit.
+        Returns:
+            True if the unit was added, False otherwise.
+        """
+        # If there's a building here, we wan't place a unit.
+        if unit_position in self.units.keys():
+            print("Unit already exists here.")
+            return False
+        else:
+            try:
+                _ = terrain_map.buildings[unit_position]
+                print("Can't spawn unit on buildings")
+                return False
+            except KeyError:
+                if unit is None:
+                    u = Unit(unit_position, unit_id)
+                else:
+                    u = unit
+                self.units[unit_position] = u
+                fog_layer.add_visible_area(unit_position, 2, u.vision_range)
+                self.draw_units()
+                fog_layer.draw_fog()
+        return True
+
+    def remove_unit(self, unit_position):
+        """
+        Removes the unit at the given hex position.
+        Args:
+            unit_position (Hexagon): hexagon for the cell to remove the unit from.
+        """
+        try:
+            u = self.units[unit_position]
+            del self.units[unit_position]
+            fog_layer.add_visible_area(unit_position, -2, u.vision_range)
+            self.units_batch.remove(f"{unit_position.q}_{unit_position.r}_{unit_position.s}")
+            self.draw_units()
+            fog_layer.draw_fog()
+        except KeyError:
+            print("can't remove non-existent unit.")
+
+    def move_unit(self, start_cell, end_cell):
+        """
+        Handles movement of a unit.
+        Args:
+            start_cell (Hexagon): cell the unit is moving from.
+            end_cell (Hexagon): cell a unit is moving to.
+        """
+        u = self.units[start_cell]
+        self.remove_unit(start_cell)
+        if not self.add_unit(end_cell, u.unit_id, u):
+            self.add_unit(start_cell, u.unit_id, u)
+            print("Unit move failed.")
+
+    def draw_units(self):
+        self.children = []
+        for k, unit in self.units.items():
+            if k not in scroller.visible_hexes:
+                try:
+                    self.units_batch.remove(f"{k.q}_{k.r}_{k.s}")
+                except Exception:
+                    pass
+                continue
+            position = hex_math.hex_to_pixel(layout, k, False)
+            anchor = sprite_width / 2, sprite_height / 2
+
+            sprite = Sprite(sprite_images[f"{unit.sprite_id}"], position=position, anchor=anchor)
+            try:
+                self.units_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
+            except Exception:
+                self.units_batch.remove(f"{k.q}_{k.r}_{k.s}")
+                self.units_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
+        self.add(self.units_batch)
+
+
+class Unit:
+    """
+    Store information about a specific unit.
+    """
+    # Probably move this into a data file at some point.
+    _unit_stats = {1: {"name": "hover tank", "speed": 10, "sprite_id": "tank", "vision": 3}}
+
+    def __init__(self, position, unit_id):
+        self.position = position
+        self.unit_id = unit_id
+        self.unit_stats = self._unit_stats[unit_id]
+        self.sprite_id = self.unit_stats["sprite_id"]
+        self.speed = self.unit_stats["speed"]
+        self.name = self.unit_stats["name"]
+        self.vision_range = self.unit_stats["vision"]
+        self.move_end = None
+
+    def __str__(self):
+        return f"{self.name} at {self.position}"
+
+
 class MenuLayer(Menu):
     is_event_handler = True
 
@@ -894,12 +1025,14 @@ if __name__ == "__main__":
     network_map = Network()
     network_layer = NetworkLayer()
     text_layer = TextOverlay()
+    unit_layer = UnitLayer()
     fog_layer = FogLayer()
     fog_layer.add_visible_area(Hexagon(0, 0, 0), 1, 9)
     fog_layer.draw_fog()
 
     scroller.add(terrain_layer, z=0)
     scroller.add(network_layer, z=1)
+    scroller.add(unit_layer, z=2)
     scroller.add(building_layer, z=2)
     scroller.add(fog_layer, z=3)
     scroller.add(overlay_layer, z=4)
