@@ -324,17 +324,25 @@ class InputLayer(ScrollableLayer):
                 # Place a test building.
                 b = Building(1)
             elif self.key is ord('d'):
-                print("delete")
-                building_layer.remove_building(h)
-                network_layer.remove_network(h)
+                if terrain_map.hexagon_map[h].visible != 0:
+                    print("delete")
+                    building_layer.remove_building(h)
+                    network_layer.remove_network(h)
+                else:
+                    print("can't delete under fog")
             elif self.key is ord('p'):
                 b = Building(3)
             elif self.key is ord('e'):
-                network_layer.plop_network(h, "energy")
+                if terrain_map.hexagon_map[h].visible != 0:
+                    network_layer.plop_network(h, "energy")
+                else:
+                    print("Can't network in fog-of-war.")
             elif self.key is ord('s'):
                 b = Building(4)
-            if b is not None:
+            if b is not None and terrain_map.hexagon_map[h].visible != 0:
                 building_layer.plop_building(h, b)
+            elif b is not None and terrain_map.hexagon_map[h].visible == 0:
+                print("Can't build in fog-of-war.")
 
 
     def on_mouse_motion(self, x, y, dx, dy):
@@ -398,6 +406,8 @@ class BuildingLayer(ScrollableLayer):
                     self.buildings_batch.remove(f"{k.q}_{k.r}_{k.s}")
                 except Exception:
                     pass
+                continue
+            if not terrain_map.hexagon_map[k].visible:
                 continue
             powered = network_map.network[k]["powered"]
             position = hex_math.hex_to_pixel(layout, k, False)
@@ -485,16 +495,18 @@ class FogLayer(ScrollableLayer):
 
     def draw_fog(self):
 
-        self.fog_batch.children = []
+        self.children = []
         viewport_hexes = scroller.visible_hexes
         for k in viewport_hexes:
-            h = terrain_map.hexagon_map[k]
+            try:
+                h = terrain_map.hexagon_map[k]
+            except Exception:
+                continue
             if h.visible == 0:
-                pass
                 position = hex_math.hex_to_pixel(layout, k, False)
                 anchor = sprite_width / 2, sprite_height / 2
                 sprite_id = "fog"
-                sprite = Sprite(sprite_images[sprite_id], position=position, anchor=anchor)
+                sprite = Sprite(sprite_images[sprite_id], position=position, anchor=anchor, opacity=223)
                 try:
                     self.fog_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
                 except Exception:
@@ -694,6 +706,8 @@ class NetworkLayer(ScrollableLayer):
                         self.network_batch.remove(f"{k.q}_{k.r}_{k.s}_{idx}")
                     except Exception:
                         pass
+                continue
+            if not terrain_map.hexagon_map[k].visible:
                 continue
             if h["type"] == "start":
                 continue
