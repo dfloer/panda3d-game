@@ -14,6 +14,7 @@ from collections import namedtuple
 from math import sqrt
 import os
 from heapq import heappush, heappop
+from queue import PriorityQueue
 import helpers
 
 Hexagon = namedtuple("Hex", ["q", "r", "s"])
@@ -925,6 +926,8 @@ class UnitLayer(ScrollableLayer):
             end_cell (Hexagon): cell a unit is moving to.
         """
         u = self.units[start_cell]
+        path = self.find_path(start_cell, end_cell)
+        print("path:", path)
         self.remove_unit(start_cell)
         if not self.add_unit(end_cell, u.unit_id, u):
             self.add_unit(start_cell, u.unit_id, u)
@@ -949,6 +952,37 @@ class UnitLayer(ScrollableLayer):
                 self.units_batch.remove(f"{k.q}_{k.r}_{k.s}")
                 self.units_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
         self.add(self.units_batch)
+
+    def find_path(self, start_cell, end_cell):
+        """
+        Checks to see if the source cell is connected to a destination cell.
+        Uses A*.
+        Args:
+            start_cell (Hexagon): hex cell that we are starting from.
+            end_cell (Hexagon): hex cell that we want to find a path to.
+        Returns:
+            A list containing the hexes that need to be traversed for the path.
+        """
+        q = PriorityQueue()
+        q.put((0, start_cell))
+        visited = {}
+        total_cost = {}
+        visited[start_cell] = None
+        total_cost[start_cell] = 0
+
+        while not q.empty():
+            _, current = q.get()
+            if current == end_cell:
+                break
+            neighbours = [hex_math.hex_neighbor(current, x) for x in range(6)]
+            for next_cell in neighbours:
+                new_cost = total_cost[current] + 1
+                if next_cell not in total_cost.keys() or new_cost < total_cost[next_cell]:
+                    total_cost[next_cell] = new_cost
+                    next_priority = new_cost + hex_math.hex_distance(end_cell, next_cell)
+                    q.put((next_priority, next_cell))
+                    visited[next_cell] = current
+        return list(visited.keys())
 
 
 class Unit:
