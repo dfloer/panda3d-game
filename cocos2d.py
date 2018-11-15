@@ -927,7 +927,10 @@ class UnitLayer(ScrollableLayer):
         """
         u = self.units[start_cell]
         path = self.find_path(start_cell, end_cell)
-        print("path:", path)
+        for x in path:
+            # For now, use the red selection box to denote hexes in the path.
+            input_layer.default_click(x)
+        u.move_path = path[1 :]
         self.remove_unit(start_cell)
         if not self.add_unit(end_cell, u.unit_id, u):
             self.add_unit(start_cell, u.unit_id, u)
@@ -953,15 +956,35 @@ class UnitLayer(ScrollableLayer):
                 self.units_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
         self.add(self.units_batch)
 
-    def find_path(self, start_cell, end_cell):
+    def find_path(self, start_cell, end_cell, include_start=False):
         """
-        Checks to see if the source cell is connected to a destination cell.
-        Uses A*.
+        Finds a path between two hexagon cells.
+        Args:
+            start_cell (Hexagon): hex cell that we are starting from.
+            end_cell (Hexagon): hex cell that we want to find a path to.
+            include_start (bool): True if the start cell should be included in the list, false otherwise.
+        Returns:
+            A list of the hexes that need to be traversed to build a path.
+        """
+        visited = self.a_star(start_cell, end_cell)
+        current = end_cell
+        path = []
+        while current != start_cell:
+            path.append(current)
+            current = visited[current]
+        if include_start:
+            path.append(start_cell)
+        path.reverse()
+        return path
+
+    def a_star(self, start_cell, end_cell):
+        """
+        Determines if the start cell is connected to the end cell.
         Args:
             start_cell (Hexagon): hex cell that we are starting from.
             end_cell (Hexagon): hex cell that we want to find a path to.
         Returns:
-            A list containing the hexes that need to be traversed for the path.
+            A list containing the hexes that were traversed to determine a path.
         """
         q = PriorityQueue()
         q.put((0, start_cell))
@@ -978,11 +1001,14 @@ class UnitLayer(ScrollableLayer):
             for next_cell in neighbours:
                 new_cost = total_cost[current] + 1
                 if next_cell not in total_cost.keys() or new_cost < total_cost[next_cell]:
+                    if next_cell in terrain_map.buildings.keys():
+                        # Don't path over a building, go around.
+                        continue
                     total_cost[next_cell] = new_cost
                     next_priority = new_cost + hex_math.hex_distance(end_cell, next_cell)
                     q.put((next_priority, next_cell))
                     visited[next_cell] = current
-        return list(visited.keys())
+        return visited
 
 
 class Unit:
@@ -1000,7 +1026,7 @@ class Unit:
         self.speed = self.unit_stats["speed"]
         self.name = self.unit_stats["name"]
         self.vision_range = self.unit_stats["vision"]
-        self.move_end = None
+        self.move_path = []
 
     def __str__(self):
         return f"{self.name} at {self.position}"
