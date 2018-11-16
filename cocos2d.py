@@ -7,6 +7,7 @@ from cocos.menu import Menu
 from cocos.text import Label
 from pyglet.window import key
 from pyglet import image
+from cocos.actions import MoveBy
 
 import hex_math
 from random import randint
@@ -926,11 +927,11 @@ class UnitLayer(ScrollableLayer):
             end_cell (Hexagon): cell a unit is moving to.
         """
         u = self.units[start_cell]
-        path = self.find_path(start_cell, end_cell)
+        path = self.find_path(start_cell, end_cell, True)
         for x in path:
             # For now, use the red selection box to denote hexes in the path.
             input_layer.default_click(x)
-        u.move_path = path[1 :]
+        u.move_path = path
         self.remove_unit(start_cell)
         if not self.add_unit(end_cell, u.unit_id, u):
             self.add_unit(start_cell, u.unit_id, u)
@@ -947,13 +948,29 @@ class UnitLayer(ScrollableLayer):
                 continue
             position = hex_math.hex_to_pixel(layout, k, False)
             anchor = sprite_width / 2, sprite_height / 2
-
-            sprite = Sprite(sprite_images[f"{unit.sprite_id}"], position=position, anchor=anchor)
-            try:
-                self.units_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
-            except Exception:
-                self.units_batch.remove(f"{k.q}_{k.r}_{k.s}")
-                self.units_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
+            if unit.move_path != []:
+                end = unit.move_path[-1]
+                start = unit.move_path[0]
+                end_pos = hex_math.hex_to_pixel(layout, end, False)
+                start_pos = hex_math.hex_to_pixel(layout, start, False)
+                move = end_pos.x - start_pos.x, end_pos.y - start_pos.y
+                sprite = Sprite(sprite_images[f"{unit.sprite_id}"], position=start_pos, anchor=anchor)
+                # Todo: Figure how to make this actually follow my path.
+                move_time = len(unit.move_path) / unit.speed
+                sprite.do(MoveBy(move, move_time))
+                try:
+                    self.units_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
+                except Exception:
+                    self.units_batch.remove(f"{k.q}_{k.r}_{k.s}")
+                    self.units_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
+                unit.move_path = []
+            else:
+                sprite = Sprite(sprite_images[f"{unit.sprite_id}"], position=position, anchor=anchor)
+                try:
+                    self.units_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
+                except Exception:
+                    self.units_batch.remove(f"{k.q}_{k.r}_{k.s}")
+                    self.units_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
         self.add(self.units_batch)
 
     def find_path(self, start_cell, end_cell, include_start=False):
