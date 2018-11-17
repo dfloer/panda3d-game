@@ -7,7 +7,7 @@ from cocos.menu import Menu
 from cocos.text import Label
 from pyglet.window import key
 from pyglet import image
-from cocos.actions import MoveBy
+from cocos.actions import Action
 
 import hex_math
 from random import randint
@@ -953,11 +953,9 @@ class UnitLayer(ScrollableLayer):
                 start = unit.move_path[0]
                 end_pos = hex_math.hex_to_pixel(layout, end, False)
                 start_pos = hex_math.hex_to_pixel(layout, start, False)
-                move = end_pos.x - start_pos.x, end_pos.y - start_pos.y
                 sprite = Sprite(sprite_images[f"{unit.sprite_id}"], position=start_pos, anchor=anchor)
                 # Todo: Figure how to make this actually follow my path.
-                move_time = len(unit.move_path) / unit.speed
-                sprite.do(MoveBy(move, move_time))
+                sprite.do(UnitMover(unit.move_path, unit.speed))
                 try:
                     self.units_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
                 except Exception:
@@ -1033,7 +1031,7 @@ class Unit:
     Store information about a specific unit.
     """
     # Probably move this into a data file at some point.
-    _unit_stats = {1: {"name": "hover tank", "speed": 10, "sprite_id": "tank", "vision": 3}}
+    _unit_stats = {1: {"name": "hover tank", "speed": .25, "sprite_id": "tank", "vision": 3}}
 
     def __init__(self, position, unit_id):
         self.position = position
@@ -1048,6 +1046,25 @@ class Unit:
     def __str__(self):
         return f"{self.name} at {self.position}"
 
+
+class UnitMover(Action):
+    def __init__(self, unit_path, unit_speed):
+        super().__init__()
+        self.path = unit_path
+        self.speed = unit_speed
+        self.time = self.speed
+
+    def step(self, dt):
+        self.time += dt
+        if self.time >= self.speed:
+            self.time = 0
+            try:
+                next_hex = self.path.pop(0)
+                position = hex_math.hex_to_pixel(layout, next_hex, False)
+                self.target.position = position
+            except IndexError:
+                pass
+                # Todo: figure out how to remove this action now that it's done.
 
 class MenuLayer(Menu):
     is_event_handler = True
