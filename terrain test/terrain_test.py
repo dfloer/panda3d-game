@@ -76,7 +76,8 @@ class Terrain:
         self.city_cores = []
         self.random_seed = random_seed
         self.chunk_size = chunk_size
-        self.noise = OpenSimplex(seed=self.random_seed)
+        self.terrain_noise = OpenSimplex(seed=self.random_seed)
+        self.random_noise = OpenSimplex(seed=self.random_seed ** self.random_seed)
         # This seems is a bit of a hack, but it seems to work. Hopefully I won't regret it later.
         # Chunk list has a key of the center of a chunk, and the values are the hexes inside that chunk.
         # The actual terrain hexes are stored in hexagon_map, with their key being the hexagon from the chunk_list.
@@ -189,7 +190,7 @@ class Terrain:
             Hexagon pointing to the center of the chunk.
         """
         # Generate a chunk with myself in the middle.
-        test_chunk = TerrainChunk(cell, self.chunk_size, self.noise)
+        test_chunk = TerrainChunk(cell, self.chunk_size, self.terrain_noise)
         to_check = test_chunk.chunk_cells.keys()
         for x in to_check:
             if x in self.chunk_list.keys():
@@ -204,11 +205,13 @@ class Terrain:
             chunk_hash (int): hash value used to determine things about this chunk.
         """
         if center not in self.chunk_list.keys():
-            chunk = TerrainChunk(center, self.chunk_size, self.noise)
+            chunk = TerrainChunk(center, self.chunk_size, self.terrain_noise)
             self.chunk_list[center] = [k for k in chunk.chunk_cells.keys()]
             new_city_core = False
-            if chunk_hash % settings.core_offset == 0:
-                new_city_core = self.add_core(center)
+            xy = hex_math.cube_to_offset(center)
+            noise_val = self.random_noise.noise2d(xy.x, xy.y) / 2.0 + 0.5  # Rescale to 0.0 to 1.0
+            if noise_val >= 0.85:
+                new_city_core = True
             for k, v in chunk.chunk_cells.items():
                 # Todo: this is a hack, figure out why overlapping chunks are ever generated.
                 if k in self.hexagon_map.keys():
@@ -219,11 +222,13 @@ class Terrain:
                     self.hexagon_map[center].terrain_type = 14
                     self.hexagon_map[center].sprite_id = '14'
                     terrain_map.city_cores += [k]
-                elif k == center and new_city_core:
-                    print(f"Enemy core added at: {center}.")
-                    self.hexagon_map[center].terrain_type = 15
-                    self.hexagon_map[center].sprite_id = '15'
-                    terrain_map.city_cores += [k]
+                # Add an enemy city core, not on a water tile.
+                elif k == center and new_city_core and int(self.hexagon_map[center].terrain_type) > 2:
+                    if self.add_core(center):
+                        print(f"Enemy core added at: {center}.")
+                        self.hexagon_map[center].terrain_type = 15
+                        self.hexagon_map[center].sprite_id = '15'
+                        terrain_map.city_cores += [k]
 
 
     def add_core(self, center):
