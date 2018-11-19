@@ -10,7 +10,9 @@ from pyglet import image
 from cocos.actions import Action
 
 import hex_math
+import settings
 from random import randint
+from opensimplex import OpenSimplex
 from collections import namedtuple
 from math import sqrt
 import os
@@ -46,23 +48,26 @@ class Terrain:
         self.chunk_size = chunk_size
         # Dictionary where the key is the hexagon the building pertains to, and the value is a Building instance.
         self.buildings = {}
-
+        self.terrain_noise = OpenSimplex(seed=self.random_seed)
+        self.random_noise = OpenSimplex(seed=self.random_seed ** self.random_seed)
         # This seems is a bit of a hack, but it seems to work. Hopefully I won't regret it later.
         # Chunk list has a key of the center of a chunk, and the values are the hexes inside that chunk.
         # The actual terrain hexes are stored in hexagon_map, with their key being the hexagon from the chunk_list.
         self.chunk_list = {}
         self.hexagon_map = {}
 
-
     def fill_viewport_chunks(self):
         """
         Fills the viewport with hex chunks.
         Chunks are assumed to be larger than the viewport. Note: This will cause issues with resizing.
         """
+        # chunks = self.find_visible_chunks()
+        # for c in chunks:
+        #     self.generate_chunk(c)
         chunks = self.find_visible_chunks()
         before_size = len(self.chunk_list)
-        for c in chunks:
-            self.generate_chunk(c)
+        for chunk in chunks:
+            self.generate_chunk(chunk)
         if len(self.chunk_list) > before_size:  # Only redraw map if we've added hexes.
             terrain_layer.draw_terrain()
 
@@ -72,25 +77,80 @@ class Terrain:
         Returns:
             A list of TerrainChunk objects that are visible in the current viewport.
         """
-        x = scroller.fx
-        y = scroller.fy
+        x = window_width // 2
+        y = window_height // 2
         screen_center = hex_math.pixel_to_hex(layout, Point(x, y))
         center = self.find_chunk_parent(screen_center)
+        return self.find_chunks(center)
 
-        # find the centers of the 8 chunks surrounding our chunk.
-        # Start with the cross ones first
+    def chunk_get_next(self, center, direction="up"):
+        """
+        Given a current chunk's anchor hexagon, find the next chunk's anchor hexagon.
+        Currently doesn't support diagonals.
+        Args:
+            center (Hexagon): the anchor hexagon for this chunk.
+            direction (str): One up up, down, left or right for the direction to get the next chunk from.
+        Returns:
+            A hexagon with the desired chunk's anchor.
+        """
         q_offset = self.chunk_size // 2
-        left = Hexagon(center.q - self.chunk_size, center.r, -(center.q - self.chunk_size) - center.r)
-        right = Hexagon(center.q + self.chunk_size, center.r, -(center.q + self.chunk_size) - center.r)
-        up = Hexagon(center.q - q_offset - 1, center.r + self.chunk_size, -(center.q - q_offset - 1) - (center.r + self.chunk_size))
-        down = Hexagon(center.q + q_offset + 1, center.r - self.chunk_size, -(center.q + q_offset + 1) - (center.r - self.chunk_size))
-        # And the four diagonals, based on the previous ones.
-        up_left = Hexagon(up.q - self.chunk_size, up.r, -(up.q - self.chunk_size) - up.r)
-        up_right = Hexagon(up.q + self.chunk_size, up.r, -(up.q + self.chunk_size) - up.r)
-        down_left = Hexagon(down.q - self.chunk_size, down.r, -(down.q - self.chunk_size) - down.r)
-        down_right = Hexagon(down.q + self.chunk_size, down.r, -(down.q + self.chunk_size) - down.r)
+        directions = {
+            "up": (center.q + q_offset + 1,
+                   center.r - self.chunk_size - 1,
+                   -(center.q + q_offset + 1) - (center.r - self.chunk_size - 1)),
+            "down": (center.q - q_offset - 1,
+                     center.r + self.chunk_size + 1,
+                     -(center.q - q_offset - 1) - (center.r + self.chunk_size + 1)),
+            "left": (center.q - self.chunk_size,
+                     center.r,
+                     -(center.q - self.chunk_size) - center.r),
+            "right": (center.q + self.chunk_size,
+                      center.r,
+                      -(center.q + self.chunk_size) - center.r),
+        }
+        return Hexagon(*directions[direction])
 
-        return up, down, left, right, up_left, up_right, down_left, down_right
+    def find_chunks(self, center):
+        """
+        Finds all of the chunks in the viewport.
+        Args:
+            center (Hexagon): hexagon representing the center of the viewport.
+        Returns:
+            A set of all the chunk anchors visible in the viewport (and then some that aren't to make sure we've filled past the edge of the viewport).
+        """
+        # First generate all of the chunks in a vertical strip centered on the center chunk to the top and bottom of viewport, plus a little extra for safety.
+        all_visible_hexes = helpers.find_visible_hexes(sprite_width, layout, scroller, safe=True)
+        ups = [center]
+        while True:
+            ups += [self.chunk_get_next(ups[-1], "up")]
+            if ups[-1] not in all_visible_hexes:
+                break
+        downs = [center]
+        while True:
+            downs += [self.chunk_get_next(downs[-1], "down")]
+            if downs[-1] not in all_visible_hexes:
+                break
+        vertical_strip = ups + downs
+        horizontal_strips = []
+        # With the vertical strip down, generate a horizontal strip for each chunk in it, to cover the viewpor.
+        for c in vertical_strip:
+            lefts = [c]
+            rights = [c]
+            while True:
+                lefts += [self.chunk_get_next(lefts[-1], "left")]
+                if lefts[-1] not in all_visible_hexes:
+                    break
+            while True:
+                rights += [self.chunk_get_next(rights[-1], "right")]
+                if rights[-1] not in all_visible_hexes:
+                    break
+            horizontal_strips += lefts + rights
+        chunks = set()
+        for x in ups + downs:
+            chunks.add(x)
+        for x in horizontal_strips:
+            chunks.add(x)
+        return chunks
 
     def find_chunk_parent(self, cell):
         """
@@ -101,23 +161,28 @@ class Terrain:
             Hexagon pointing to the center of the chunk.
         """
         # Generate a chunk with myself in the middle.
-        test_chunk = TerrainChunk(cell, self.chunk_size)
+        test_chunk = TerrainChunk(cell, self.chunk_size, self.terrain_noise)
         to_check = test_chunk.chunk_cells.keys()
         for x in to_check:
             if x in self.chunk_list.keys():
                 return x
         return cell
 
-
     def generate_chunk(self, center):
         """
         Generates a chunk. See note in init function about how hacky this is.
         Args:
             center (Hexagon): hexagon representing the center of the chunk.
+            chunk_hash (int): hash value used to determine things about this chunk.
         """
         if center not in self.chunk_list.keys():
-            chunk = TerrainChunk(center, self.chunk_size)
+            chunk = TerrainChunk(center, self.chunk_size, self.terrain_noise)
             self.chunk_list[center] = [k for k in chunk.chunk_cells.keys()]
+            new_city_core = False
+            xy = hex_math.cube_to_offset(center)
+            noise_val = self.random_noise.noise2d(xy.x, xy.y) / 2.0 + 0.5  # Rescale to 0.0 to 1.0
+            if noise_val >= 0.85:
+                new_city_core = True
             for k, v in chunk.chunk_cells.items():
                 # Todo: this is a hack, figure out why overlapping chunks are ever generated.
                 if k in self.hexagon_map.keys():
@@ -125,9 +190,17 @@ class Terrain:
                     continue
                 self.hexagon_map[k] = v
                 if k == Hexagon(0, 0, 0):
-                    self.hexagon_map[center].terrain_type = 7
-                    self.hexagon_map[center].sprite_id = '7'
+                    self.hexagon_map[center].terrain_type = 15
+                    self.hexagon_map[center].sprite_id = '15'
                     self.add_building(center, Building(0))
+                    terrain_map.city_cores += [k]
+                # Add an enemy city core, not on a water tile.
+                elif k == center and new_city_core and int(self.hexagon_map[center].terrain_type) > 2:
+                    if self.add_core(center):
+                        print(f"Enemy core added at: {center}.")
+                        self.hexagon_map[center].terrain_type = 16
+                        self.hexagon_map[center].sprite_id = '16'
+                        terrain_map.city_cores += [k]
 
     def add_safe_area(self, center, safe_type=0, radius=7):
         """
@@ -143,7 +216,6 @@ class Terrain:
             if self.hexagon_map[h].safe == 1:
                 continue
             self.hexagon_map[h].safe += safe_type
-
 
     def add_building(self, hex_coords, building):
         """
@@ -166,6 +238,21 @@ class Terrain:
         del self.buildings[hex_coords]
         self.hexagon_map[hex_coords].building = None
 
+    def add_core(self, center):
+        """
+        Attempts to add a core to this chunk. Minimum distance from another core determined in settings file.
+        Args:
+            center (Hexagon): hexagon to attempt to add the new city core at.
+        Returns:
+            True if this is a good chunk to add a core in, False if it isn't.
+        """
+        minimum = settings.minimum_core_distance
+        for c in terrain_map.city_cores:
+            # If we're less than the minimum to any core, we're done.
+            if hex_math.hex_distance(c, center) < minimum:
+                return False
+        return True
+
     def __len__(self):
         return len(self.chunk_list) * self.chunk_size * self.chunk_size
 
@@ -174,12 +261,12 @@ class TerrainChunk:
     """
     Stores metadata and data related to a terrain chunk.
     """
-    def __init__(self, center, chunk_size):
+    def __init__(self, center, chunk_size, noise):
         self.center = center
         self.chunk_size = chunk_size
-        self.chunk_cells = self.generate(self.center)
+        self.chunk_cells = self.generate(self.center, noise)
 
-    def generate(self, center):
+    def generate(self, center, noise):
         """
         Generates a chunk, sized as given. Current algorithm is to generate a "rectangle". Why a rectangle? Because that's the shape of a window, and it allows chunks to be accessed as x/y coordinates of their centers.
         Args:
@@ -187,23 +274,29 @@ class TerrainChunk:
         Returns:
             A dictionary of terrain hexes, containing chunk_size * chunk_size items.
         """
+        n_bins = settings.terrain_sprite_bins
         x_dim, y_dim = (self.chunk_size, self.chunk_size)
         chunk_cells = {}
         # Why all this futzing around with dimensions // 2? Because I wanted the start of the chunk to be centered in the middle of the chunk.
-        r_min = -x_dim // 2 + 1
-        r_max = x_dim // 2 + 1
-        for r in range(r_min, r_max):
+        r_min = -x_dim // 2
+        r_max = x_dim // 2
+        for r in range(r_min, r_max + 1):
             r_offset = r // 2
             q_min = -(y_dim // 2) - r_offset
-            q_max = y_dim // 2 + 1 - r_offset
-            for q in range(q_min, q_max):
+            q_max = y_dim // 2 - r_offset
+            for q in range(q_min, q_max + 1):
                 qq = center.q + q
                 rr = center.r + r
                 h = Hexagon(qq, rr, -qq - rr)
-                terrain_type = str(randint(1, 6))
+                # Normalize to offset grid coordinates, because we want to sample the noise at points right next to each other.
+                xy = hex_math.cube_to_offset(h)
+                damp = settings.noise_damping_factor
+                noise_val = noise.noise2d(xy.x * damp, xy.y * damp) / 2.0 + 0.5  # Rescale to 0.0 to 1.0
+                # Find the closest value in the list to our noise value. We want to normalize to a sprite.
+                t = min(range(len(n_bins)), key=lambda i: abs(n_bins[i] - noise_val))
+                terrain_type = str(t)
                 sprite_id = terrain_type
-                building = None
-                chunk_cells[h] = TerrainCell(terrain_type, sprite_id, building)
+                chunk_cells[h] = TerrainCell(terrain_type, sprite_id)
         return chunk_cells
 
     def __len__(self):
@@ -1109,6 +1202,7 @@ if __name__ == "__main__":
     terrain_map = Terrain(11)
     building_layer = BuildingLayer()
     terrain_map.generate_chunk(Hexagon(0, 0, 0))
+    terrain_map.city_cores += [Hexagon(0, 0, 0)]
     input_layer = InputLayer()
     terrain_layer = MapLayer()
     terrain_layer.draw_terrain()
@@ -1134,4 +1228,3 @@ if __name__ == "__main__":
     building_layer.draw_buildings()
     director.window.push_handlers(keyboard)
     director.run(Scene(scroller, text_layer))
-

@@ -137,6 +137,11 @@ def polygon_corners(layout, h):
         corners.append(Point(center.x + offset.x, center.y + offset.y))
     return corners
 
+def cube_to_offset(h):
+    col = h.q
+    row = h.r + (h.q + 1 * (h.q & 1)) // 2
+    return Point(col, row)
+
 # End of code from Redblob.
 
 def get_hex_chunk(center, radius):
