@@ -28,8 +28,8 @@ sprite_height = 32
 pointy_width = round(sprite_width / sqrt(3))  # This is the distance from the center to one of the corners.
 window_title = "cocos2d hex test"
 
-window_width = 1280
-window_height = 800
+window_width = 1920
+window_height = 1200
 
 layout_size = Point(pointy_width, sprite_height)
 layout = hex_math.Layout(hex_math.layout_pointy, layout_size, Point(window_width // 2, window_height // 2))
@@ -43,7 +43,7 @@ class Terrain:
     A class to store the terrain.
     """
     def __init__(self, chunk_size=31, random_seed=42):
-        self.city_cores = []
+        self.city_cores = {}
         self.random_seed = random_seed
         self.chunk_size = chunk_size
         # Dictionary where the key is the hexagon the building pertains to, and the value is a Building instance.
@@ -193,14 +193,20 @@ class Terrain:
                     self.hexagon_map[center].terrain_type = 15
                     self.hexagon_map[center].sprite_id = '15'
                     self.add_building(center, Building(0))
-                    terrain_map.city_cores += [k]
+                    terrain_map.city_cores[k] = "friendly"
                 # Add an enemy city core, not on a water tile.
                 elif k == center and new_city_core and int(self.hexagon_map[center].terrain_type) > 2:
                     if self.add_core(center):
                         print(f"Enemy core added at: {center}.")
                         self.hexagon_map[center].terrain_type = 16
                         self.hexagon_map[center].sprite_id = '16'
-                        terrain_map.city_cores += [k]
+                        terrain_map.city_cores[k] = "enemy"
+                # temporary, for testing
+                elif k == Hexagon(19, -11, -8):
+                    self.hexagon_map[center].terrain_type = 16
+                    self.hexagon_map[center].sprite_id = '16'
+                    terrain_map.city_cores[k] = "enemy"
+
 
     def add_safe_area(self, center, safe_type=0, radius=7):
         """
@@ -247,7 +253,7 @@ class Terrain:
             True if this is a good chunk to add a core in, False if it isn't.
         """
         minimum = settings.minimum_core_distance
-        for c in terrain_map.city_cores:
+        for c in terrain_map.city_cores.keys():
             # If we're less than the minimum to any core, we're done.
             if hex_math.hex_distance(c, center) < minimum:
                 return False
@@ -939,6 +945,8 @@ class InputScrolling(ScrollingManager):
             overlay_layer.draw_safe()
             network_layer.draw_network()
             fog_layer.draw_fog()
+            enemy_layer.spawn_enemies()
+            enemy_layer.draw_enemies()
             # Generate more terrain chunks.
             terrain_map.fill_viewport_chunks()
 
@@ -1160,12 +1168,117 @@ class UnitMover(Action):
                 fog_layer.add_visible_area(self.last, -2, self.vision_range)
                 fog_layer.add_visible_area(next_hex, 2, self.vision_range)
                 fog_layer.draw_fog()
+                enemy_layer.draw_enemies()
                 position = hex_math.hex_to_pixel(layout, next_hex, False)
                 self.target.position = position
                 self.last = next_hex
             except IndexError:
                 pass
                 # Todo: figure out how to remove this action now that it's done.
+
+
+class EnemyLayer(ScrollableLayer):
+    def __init__(self):
+        super().__init__()
+        self.enemies = {}
+        self.enemy_batch = BatchNode()
+        self.enemy_batch.position = layout.origin.x, layout.origin.y
+        self.enemy_level = 1
+        self.current_level = 0
+
+    def set_focus(self, *args, **kwargs):
+        super().set_focus(*args, **kwargs)
+
+    def draw_enemies(self):
+        """
+        Handles drawing of all visible enemy units.
+        """
+        self.children = []
+        for k, enemy in self.enemies.items():
+            if k not in scroller.visible_hexes:
+                try:
+                    self.units_batch.remove(f"{k.q}_{k.r}_{k.s}")
+                except Exception:
+                    pass
+                continue
+            if terrain_map.hexagon_map[k].visible == 0:
+                continue
+            position = hex_math.hex_to_pixel(layout, k, False)
+            anchor = sprite_width / 2, sprite_height / 2
+            sprite = Sprite(sprite_images[f"{enemy.sprite_id}"], position=position, anchor=anchor)
+            try:
+                self.enemy_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
+            except Exception:
+                self.enemy_batch.remove(f"{k.q}_{k.r}_{k.s}")
+                self.enemy_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
+        self.add(self.enemy_batch)
+
+    def spawn_enemies(self):
+        """
+        Handles actual spawning of enemies.
+        Right now, only spawns enemies for visible sections of the screen for testing, but they should be able to spawn and attack anywhere on the map.
+        Enemies will only spawn if there aren't already too many enemies around, as denoted by enemy_level. This is subject to change, but is a way to limit difficulty for now.
+        """
+        enemy_cores = [k for k, v in terrain_map.city_cores.items() if v == "enemy"]
+        # Only spawn an enemy if we've discovered another enemy core, otherwise give the player some time to expand, etc.
+        if enemy_cores is not [] and self.current_level < self.enemy_level:
+            window_center = Point(scroller.fx, scroller.fy)
+            window_center_hex = hex_math.pixel_to_hex(layout, window_center)
+            # find the closest enemy core to the view's center.
+            distances = [hex_math.hex_distance(x, window_center_hex) for x in enemy_cores]
+            closest = enemy_cores[distances.index(min(distances))]
+            tries = 10
+            while self.current_level < self.enemy_level and tries > 0:
+                self.spawn_single_enemy(closest)
+                tries -= 1
+
+    def spawn_single_enemy(self, core):
+        """
+        Spawns a single enemy.
+        Won't spawn enemies on safe areas, so this could technically result in a situation where enemies won't spawn. This'll need to be fixed.
+        Todo: more complex spawning logic and checks.
+        Args:
+            core (Hexagon): coordinates for the core to spawn around.
+        Returns:
+            False if unable to spawn an enemy, otherwise True
+        """
+        if terrain_map.hexagon_map[core].safe == 0:
+            new_q = randint(-2, 2) + core.q
+            new_r = randint(-2, 2) + core.r
+            new_s = -new_q - new_r
+            new_position = Hexagon(new_q, new_r, new_s)
+            if new_position in terrain_map.buildings.keys() or new_position in unit_layer.units.keys():
+                # Don't spawn on building or unit. Energy networks are fine.
+                return False
+            try:
+                _ = self.enemies[new_position]
+            except KeyError:
+                print(f"Spawning enemy at {new_position}")
+                e = Enemy(new_position, 1)
+                self.enemies[new_position] = e
+                self.current_level += e.level
+            return True
+        return False
+
+
+class Enemy:
+    """
+    Class to store information related to enemy creeps.
+    """
+    _enemy_stats = settings.enemy_stats
+
+    def __init__(self, position, enemy_id):
+        self.position = position
+        self.enemy_id = enemy_id
+        self.name = self._enemy_stats[enemy_id]["name"]
+        self.speed = self._enemy_stats[enemy_id]["speed"]
+        self.sprite_id = self._enemy_stats[enemy_id]["sprite_id"]
+        self.health = self._enemy_stats[enemy_id]["health"]
+        self.level = self._enemy_stats[enemy_id]["level"]
+
+    def __str__(self):
+        return f"{self.name} at {self.position} has health {self.health}"
+
 
 class MenuLayer(Menu):
     is_event_handler = True
@@ -1210,7 +1323,7 @@ if __name__ == "__main__":
     terrain_map = Terrain(11)
     building_layer = BuildingLayer()
     terrain_map.generate_chunk(Hexagon(0, 0, 0))
-    terrain_map.city_cores += [Hexagon(0, 0, 0)]
+    terrain_map.city_cores[Hexagon(0, 0, 0)] = "friendly"
     input_layer = InputLayer()
     terrain_layer = MapLayer()
     terrain_layer.draw_terrain()
@@ -1225,11 +1338,13 @@ if __name__ == "__main__":
     fog_layer = FogLayer()
     fog_layer.add_visible_area(Hexagon(0, 0, 0), 1, 9)
     fog_layer.draw_fog()
+    enemy_layer = EnemyLayer()
 
     scroller.add(terrain_layer, z=0)
     scroller.add(network_layer, z=1)
     scroller.add(unit_layer, z=2)
     scroller.add(building_layer, z=2)
+    scroller.add(enemy_layer, z=2)
     scroller.add(fog_layer, z=3)
     scroller.add(overlay_layer, z=4)
     scroller.add(input_layer, z=5)
