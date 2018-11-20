@@ -325,7 +325,7 @@ class Building:
     """
     A class to store the different buildings in.
     """
-    _sprite_to_building = {0: "core claimed", 1: "RB", 2: "HR", 3: "protection tower", 4: "sensor tower"}
+    _sprite_to_building = {0: "core claimed", 1: "RB", 2: "HR", 3: "protection tower", 4: "sensor tower", 5: "energy tower"}
 
     def __init__(self, building_id):
         self.building_id = building_id
@@ -437,7 +437,8 @@ class InputLayer(ScrollableLayer):
                 b = Building(4)
             elif self.key is ord('t'):
                 unit_layer.add_unit(h, 1)
-
+            elif self.key is ord('r'):
+                b = Building(5)
             if b is not None and terrain_map.hexagon_map[h].visible != 0:
                 building_layer.plop_building(h, b)
             elif b is not None and terrain_map.hexagon_map[h].visible == 0:
