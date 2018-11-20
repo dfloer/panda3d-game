@@ -967,13 +967,14 @@ class UnitLayer(ScrollableLayer):
     def set_focus(self, *args, **kwargs):
         super().set_focus(*args, **kwargs)
 
-    def add_unit(self, unit_position, unit_id, unit=None):
+    def add_unit(self, unit_position, unit_id, unit=None, move=False):
         """
         Instantiates a unit at the given position. Units can be on top of networks, but not on top ob buildings.
         Args:
             unit_id (int): if of the unit.
             unit_position (Hexagon): position to create the unit at.
             unit (Unit): unit if we're using this function with an existing unit.
+            move (Bool): True is this is the add after a move, false otherwise.
         Returns:
             True if the unit was added, False otherwise.
         """
@@ -992,21 +993,24 @@ class UnitLayer(ScrollableLayer):
                 else:
                     u = unit
                 self.units[unit_position] = u
-                fog_layer.add_visible_area(unit_position, 2, u.vision_range)
+                if not move:
+                    fog_layer.add_visible_area(unit_position, 2, u.vision_range)
                 self.draw_units()
                 fog_layer.draw_fog()
         return True
 
-    def remove_unit(self, unit_position):
+    def remove_unit(self, unit_position, move=False):
         """
         Removes the unit at the given hex position.
         Args:
             unit_position (Hexagon): hexagon for the cell to remove the unit from.
+            move (Bool): True is this is the add after a move, false otherwise.
         """
         try:
             u = self.units[unit_position]
             del self.units[unit_position]
-            fog_layer.add_visible_area(unit_position, -2, u.vision_range)
+            if not move:
+                fog_layer.add_visible_area(unit_position, -2, u.vision_range)
             self.units_batch.remove(f"{unit_position.q}_{unit_position.r}_{unit_position.s}")
             self.draw_units()
             fog_layer.draw_fog()
@@ -1022,13 +1026,10 @@ class UnitLayer(ScrollableLayer):
         """
         u = self.units[start_cell]
         path = self.find_path(start_cell, end_cell, True)
-        for x in path:
-            # For now, use the red selection box to denote hexes in the path.
-            input_layer.default_click(x)
         u.move_path = path
-        self.remove_unit(start_cell)
-        if not self.add_unit(end_cell, u.unit_id, u):
-            self.add_unit(start_cell, u.unit_id, u)
+        self.remove_unit(start_cell, move=True)
+        if not self.add_unit(end_cell, u.unit_id, u, move=True):
+            self.add_unit(start_cell, u.unit_id, u, move=True)
             print("Unit move failed.")
 
     def draw_units(self):
@@ -1049,7 +1050,7 @@ class UnitLayer(ScrollableLayer):
                 start_pos = hex_math.hex_to_pixel(layout, start, False)
                 sprite = Sprite(sprite_images[f"{unit.sprite_id}"], position=start_pos, anchor=anchor)
                 # Todo: Figure how to make this actually follow my path.
-                sprite.do(UnitMover(unit.move_path, unit.speed))
+                sprite.do(UnitMover(unit.move_path, unit.speed, unit.vision_range))
                 try:
                     self.units_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
                 except Exception:
@@ -1142,11 +1143,13 @@ class Unit:
 
 
 class UnitMover(Action):
-    def __init__(self, unit_path, unit_speed):
+    def __init__(self, unit_path, unit_speed, vision_range):
         super().__init__()
         self.path = unit_path
         self.speed = unit_speed
         self.time = self.speed
+        self.last = self.path[0]
+        self.vision_range = vision_range
 
     def step(self, dt):
         self.time += dt
@@ -1154,8 +1157,12 @@ class UnitMover(Action):
             self.time = 0
             try:
                 next_hex = self.path.pop(0)
+                fog_layer.add_visible_area(self.last, -2, self.vision_range)
+                fog_layer.add_visible_area(next_hex, 2, self.vision_range)
+                fog_layer.draw_fog()
                 position = hex_math.hex_to_pixel(layout, next_hex, False)
                 self.target.position = position
+                self.last = next_hex
             except IndexError:
                 pass
                 # Todo: figure out how to remove this action now that it's done.
