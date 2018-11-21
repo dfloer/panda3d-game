@@ -1165,10 +1165,11 @@ class UnitMover(Action):
             self.time = 0
             try:
                 next_hex = self.path.pop(0)
-                fog_layer.add_visible_area(self.last, -2, self.vision_range)
-                fog_layer.add_visible_area(next_hex, 2, self.vision_range)
-                fog_layer.draw_fog()
-                enemy_layer.draw_enemies()
+                if self.vision_range != 0:
+                    fog_layer.add_visible_area(self.last, -2, self.vision_range)
+                    fog_layer.add_visible_area(next_hex, 2, self.vision_range)
+                    fog_layer.draw_fog()
+                    enemy_layer.draw_enemies()
                 position = hex_math.hex_to_pixel(layout, next_hex, False)
                 self.target.position = position
                 self.last = next_hex
@@ -1205,12 +1206,25 @@ class EnemyLayer(ScrollableLayer):
                 continue
             position = hex_math.hex_to_pixel(layout, k, False)
             anchor = sprite_width / 2, sprite_height / 2
-            sprite = Sprite(sprite_images[f"{enemy.sprite_id}"], position=position, anchor=anchor)
-            try:
-                self.enemy_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
-            except Exception:
-                self.enemy_batch.remove(f"{k.q}_{k.r}_{k.s}")
-                self.enemy_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
+            if enemy.move_path != []:
+                start = enemy.move_path[0]
+                start_pos = hex_math.hex_to_pixel(layout, start, False)
+                sprite = Sprite(sprite_images[f"{enemy.sprite_id}"], position=start_pos, anchor=anchor)
+                # Todo: Figure how to make this actually follow my path.
+                sprite.do(UnitMover(enemy.move_path, enemy.speed, 0))
+                try:
+                    self.enemy_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
+                except Exception:
+                    self.enemy_batch.remove(f"{k.q}_{k.r}_{k.s}")
+                    self.enemy_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
+                enemy.move_path = []
+            else:
+                sprite = Sprite(sprite_images[f"{enemy.sprite_id}"], position=position, anchor=anchor)
+                try:
+                    self.enemy_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
+                except Exception:
+                    self.enemy_batch.remove(f"{k.q}_{k.r}_{k.s}")
+                    self.enemy_batch.add(sprite, z=-k.r, name=f"{k.q}_{k.r}_{k.s}")
         self.add(self.enemy_batch)
 
     def spawn_enemies(self):
@@ -1257,8 +1271,97 @@ class EnemyLayer(ScrollableLayer):
                 e = Enemy(new_position, 1)
                 self.enemies[new_position] = e
                 self.current_level += e.level
+            self.move_enemies()
             return True
         return False
+
+    def move_enemies(self):
+        """
+        Moves the enemy creep towards a target to attack.
+        Right now, it'll head for the closest network connection or building.
+        """
+        for e in self.enemies.values():
+            print(e)
+            if e.move_path is [] and e.target != e.position:
+                print(e)
+                self.find_target(e)
+                print(e)
+            else:
+                pass
+            print(e)
+
+    def find_target(self, enemy):
+        """
+        Finds a target, and a path to a target, for a given enemy creep. Flips a coin (50/50 chance) of choosing a building or network connection to go after.
+        Args:
+            enemy (Enemy): enemy creep to find a target for.
+        Returns:
+            Nothing, but updates the move_path and target attributes of the enemy instance.
+        """
+        if randint(0, 1) == 0:
+            buildings = list(terrain_map.buildings.keys())
+            distances = [hex_math.hex_distance(x, enemy.position) for x in buildings]
+            closest = buildings[distances.index(min(distances))]
+        else:
+            networks = list(network_map.network.keys())
+            distances = [hex_math.hex_distance(x, enemy.position) for x in networks]
+            closest = networks[distances.index(min(distances))]
+        enemy.target = closest
+        enemy.move_path = self.find_path(enemy.position, enemy.target, True)
+
+
+    # Todo: generalize these two functions so that they can be pulled out.
+    # Don't need a second copy of them here and in units.
+    def find_path(self, start_cell, end_cell, include_start=False):
+        """
+        Finds a path between two hexagon cells.
+        Args:
+            start_cell (Hexagon): hex cell that we are starting from.
+            end_cell (Hexagon): hex cell that we want to find a path to.
+            include_start (bool): True if the start cell should be included in the list, false otherwise.
+        Returns:
+            A list of the hexes that need to be traversed to build a path.
+        """
+        visited = self.a_star(start_cell, end_cell)
+        current = end_cell
+        path = []
+        while current != start_cell:
+            path.append(current)
+            current = visited[current]
+        if include_start:
+            path.append(start_cell)
+        path.reverse()
+        return path
+
+    def a_star(self, start_cell, end_cell):
+        """
+        Determines if the start cell is connected to the end cell.
+        Args:
+            start_cell (Hexagon): hex cell that we are starting from.
+            end_cell (Hexagon): hex cell that we want to find a path to.
+        Returns:
+            A list containing the hexes that were traversed to determine a path.
+        """
+        q = PriorityQueue()
+        q.put((0, start_cell))
+        visited = {}
+        total_cost = {}
+        visited[start_cell] = None
+        total_cost[start_cell] = 0
+
+        while not q.empty():
+            _, current = q.get()
+            if current == end_cell:
+                break
+            neighbours = [hex_math.hex_neighbor(current, x) for x in range(6)]
+            for next_cell in neighbours:
+                new_cost = total_cost[current] + 1
+                if next_cell not in total_cost.keys() or new_cost < total_cost[next_cell]:
+                    total_cost[next_cell] = new_cost
+                    next_priority = new_cost + hex_math.hex_distance(end_cell, next_cell)
+                    q.put((next_priority, next_cell))
+                    visited[next_cell] = current
+        return visited
 
 
 class Enemy:
@@ -1275,9 +1378,11 @@ class Enemy:
         self.sprite_id = self._enemy_stats[enemy_id]["sprite_id"]
         self.health = self._enemy_stats[enemy_id]["health"]
         self.level = self._enemy_stats[enemy_id]["level"]
+        self.move_path = []
+        self.target = None
 
     def __str__(self):
-        return f"{self.name} at {self.position} has health {self.health}"
+        return f"{self.name} at {self.position} has health {self.health} and is attacking {self.target}"
 
 
 class MenuLayer(Menu):
