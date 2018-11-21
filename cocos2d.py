@@ -1247,7 +1247,7 @@ class EnemyLayer(ScrollableLayer):
             new_r = randint(-2, 2) + core.r
             new_s = -new_q - new_r
             new_position = Hexagon(new_q, new_r, new_s)
-            if new_position in terrain_map.buildings.keys() or new_position in unit_layer.units.keys():
+            if new_position in terrain_map.buildings.keys() or new_position in unit_layer.units.keys() or new_position == core:
                 # Don't spawn on building or unit. Energy networks are fine.
                 return False
             try:
