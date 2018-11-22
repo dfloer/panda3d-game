@@ -646,6 +646,7 @@ class OverlayLayer(ScrollableLayer):
     _neighbour_to_edge_sprite = {0: "right", 1: "bottom right", 2: "bottom left", 3: "left", 4: "top left", 5: "top right"}
 
     def draw_safe(self):
+        self.children = []
         for k, h in terrain_map.hexagon_map.items():
             if k not in scroller.visible_hexes:
                 for idx in range(6):
@@ -815,6 +816,7 @@ class NetworkLayer(ScrollableLayer):
         """
         Handles drawing of the network.
         """
+        self.children = []
         network_map.update_powered()
         for k, h in network_map.network.items():
             if k not in scroller.visible_hexes:
