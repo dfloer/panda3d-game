@@ -757,24 +757,24 @@ class Network:
         Returns:
             Either a list containing the hexes that need to be traversed for the path, or None if they aren't connected.
         """
-        q = []
-        heappush(q, [cell_source, 0])
+        q = PriorityQueue()
+        q.put((0, cell_source))
         visited = {}
         total_cost = {}
         visited[cell_source] = None
         total_cost[cell_source] = 0
 
-        while len(q) != 0:
-            current, _ = heappop(q)
+        while not q.empty():
+            _, current = q.get()
             if current == cell_destination:
                 return visited
             neighbours = [hex_math.hex_neighbor(current, x) for x in range(6) if hex_math.hex_neighbor(current, x) in self.network.keys()]
             for next_cell in neighbours:
                 new_cost = total_cost[current] + 1
-                if next_cell not in total_cost or new_cost < total_cost[next_cell]:
+                if next_cell not in total_cost.keys() or new_cost < total_cost[next_cell]:
                     total_cost[next_cell] = new_cost
                     p = new_cost + hex_math.hex_distance(cell_destination, next_cell)
-                    heappush(q, [next_cell, p])
+                    q.put((p, next_cell))
                     visited[next_cell] = current
         return None
 
