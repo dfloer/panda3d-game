@@ -1283,14 +1283,9 @@ class EnemyLayer(ScrollableLayer):
         Right now, it'll head for the closest network connection or building.
         """
         for e in self.enemies.values():
-            print(e)
-            if e.move_path is [] and e.target != e.position:
-                print(e)
+            # Todo: Figure out why this is ever None. It shouldn't be.
+            if e.move_path in ([], None) and e.target != e.position:
                 self.find_target(e)
-                print(e)
-            else:
-                pass
-            print(e)
 
     def find_target(self, enemy):
         """
