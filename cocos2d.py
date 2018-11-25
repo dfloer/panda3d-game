@@ -200,11 +200,13 @@ class Terrain:
                         print(f"Enemy core added at: {center}.")
                         self.hexagon_map[center].terrain_type = 16
                         self.hexagon_map[center].sprite_id = '16'
+                        self.add_building(center, Building(6))
                         terrain_map.city_cores[k] = "enemy"
                 # temporary, for testing
                 elif k == Hexagon(19, -11, -8):
                     self.hexagon_map[center].terrain_type = 16
                     self.hexagon_map[center].sprite_id = '16'
+                    self.add_building(center, Building(6))
                     terrain_map.city_cores[k] = "enemy"
 
 
@@ -331,7 +333,7 @@ class Building:
     """
     A class to store the different buildings in.
     """
-    _sprite_to_building = {0: "core claimed", 1: "RB", 2: "HR", 3: "protection tower", 4: "sensor tower", 5: "energy tower"}
+    _sprite_to_building = {0: "core claimed", 1: "RB", 2: "HR", 3: "protection tower", 4: "sensor tower", 5: "energy tower", 6: "core enemy"}
 
     def __init__(self, building_id):
         self.building_id = building_id
@@ -526,13 +528,17 @@ class BuildingLayer(ScrollableLayer):
                 continue
             if not terrain_map.hexagon_map[k].visible:
                 continue
-            powered = network_map.network[k]["powered"]
+            try:
+                powered = network_map.network[k]["powered"]
+            except KeyError:  # enemy buildings aren't part of the network map.
+                powered = False
+                pass
             position = hex_math.hex_to_pixel(layout, k, False)
             anchor = sprite_width / 2, sprite_height / 2
             p = " off"
             if powered:
                 p = " on"
-            if building.building_id == 0:
+            if building.building_id in (0, 6):  # captured and enemy cores.
                 p = ''
             sprite = Sprite(sprite_images[f"{building.sprite_id}{p}"], position=position, anchor=anchor)
             try:
@@ -1295,16 +1301,25 @@ class EnemyLayer(ScrollableLayer):
         Returns:
             Nothing, but updates the move_path and target attributes of the enemy instance.
         """
-        if randint(0, 1) == 0:
-            buildings = list(terrain_map.buildings.keys())
-            distances = [hex_math.hex_distance(x, enemy.position) for x in buildings]
-            closest = buildings[distances.index(min(distances))]
+        b_or_n = randint(0, 1)
+        buildings = list(terrain_map.buildings.keys())
+        distances_b = [hex_math.hex_distance(x, enemy.position) for x, v in terrain_map.buildings.items() if v.building_id not in (0, 6)]
+        networks = list(network_map.network.keys())
+        distances_n = [hex_math.hex_distance(x, enemy.position) for x in networks]
+        enemy.target = None
+        if distances_n == [] and distances_b == []:
+            print("No target found.")
+        elif distances_n != [] and distances_b == []:
+            enemy.target = networks[distances_n.index(min(distances_n))]
+        elif distances_n == [] and distances_b != []:
+            enemy.target = buildings[distances_b.index(min(distances_b))]
         else:
-            networks = list(network_map.network.keys())
-            distances = [hex_math.hex_distance(x, enemy.position) for x in networks]
-            closest = networks[distances.index(min(distances))]
-        enemy.target = closest
-        enemy.move_path = self.find_path(enemy.position, enemy.target, True)
+            if b_or_n:
+                enemy.target = buildings[distances_b.index(min(distances_b))]
+            else:
+                enemy.target = networks[distances_n.index(min(distances_n))]
+        if enemy.target is not None:
+            enemy.move_path = self.find_path(enemy.position, enemy.target, True)
 
 
     # Todo: generalize these two functions so that they can be pulled out.
